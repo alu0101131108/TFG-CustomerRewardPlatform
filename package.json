@@ -1,0 +1,22 @@
+{
+  "name": "tfg-customerrewardplatform",
+  "version": "1.0.0",
+  "description": "Final University Project",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alu0101131108/TFG-CustomerRewardPlatform.git"
+  },
+  "author": "Sebastian Tamayo Guzman",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/alu0101131108/TFG-CustomerRewardPlatform/issues"
+  },
+  "homepage": "https://github.com/alu0101131108/TFG-CustomerRewardPlatform#readme",
+  "dependencies": {
+    "solc": "^0.8.7-fixed"
+  }
+}
