@@ -12,6 +12,9 @@ contract RewardCenter {
   mapping(address => PlanProfile) public planRegistry; // Address => Reward Plan Profile.
   mapping(address => address[]) public entityRelatedPlans; // Address => Plan adress array.
 
+  // Event for when plan is created, with plan address, creator address and transaction gas price.
+  event RewardPlanCreated(address planAddress, address creator);
+
   modifier onlyPlans() {
     require(planRegistry[msg.sender].active, "Only active plans authorized");
     _;
@@ -85,6 +88,8 @@ contract RewardCenter {
       creatorContribution
     );
     require(payable(address(plan)).send(creatorContribution), "Payment failed");
+
+    emit RewardPlanCreated(address(plan), msg.sender);
 
     return address(plan);
   }
