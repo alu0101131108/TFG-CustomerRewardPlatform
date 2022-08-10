@@ -4,6 +4,10 @@ const { time, loadFixture } = require('@nomicfoundation/hardhat-network-helpers'
 const { anyValue } = require('@nomicfoundation/hardhat-chai-matchers/withArgs');
 const fs = require('fs');
 
+// Get contract ABIs. Can also be taken from <ContractFactory>.interface.
+const REWARD_CENTER_ABI = JSON.parse(fs.readFileSync('artifacts/contracts/RewardCenter.sol/RewardCenter.json', 'utf8')).abi;
+const REWARD_PLAN_ABI = JSON.parse(fs.readFileSync('artifacts/contracts/RewardPlan.sol/RewardPlan.json', 'utf8')).abi;
+
 async function getEventArguments(transaction, expectedEvent) {
   const rc = await transaction.wait();
   const event = rc.events.find(event => event.event = expectedEvent);
@@ -23,11 +27,7 @@ async function rewardPlanConstructionStage(creatorContribution = 1000, signPerio
   const transaction = await rewardCenter.createRewardPlan(creatorContribution, signPeriodDaysLimit, { value: transactionValue });
   const [newPlanAddress] = await getEventArguments(transaction, 'RewardPlanCreated');
 
-  const abiFile = fs.readFileSync('artifacts/contracts/RewardPlan.sol/RewardPlan.json', 'utf8');
-  const abi = JSON.parse(abiFile).abi;
-
-  const accounts = await ethers.getSigners();
-  const rewardPlan = new ethers.Contract(newPlanAddress, abi, accounts[0]);
+  const rewardPlan = await ethers.getContractAt("RewardPlan", newPlanAddress);
 
   return { rewardCenter, rewardPlan };
 }
@@ -67,11 +67,11 @@ describe('Reward Platform', function () {
       assert(stage === 0);
     });
 
-    // it('Should change RewardPlans stage to 1', async function () {
-    //   const { rewardCenter, rewardPlan, transaction } = await loadFixture(rewardPlanSigningStage);
-    //   const stage = await rewardPlan.stage;
-    //   assert(stage == 1);
-    // });
+    it('Should change RewardPlans stage to 2', async function () {
+      const { rewardCenter, rewardPlan, transaction } = await loadFixture(rewardPlanSigningStage);
+      const stage = await rewardPlan.stage();
+      assert(stage === 2);
+    });
 
   });
 
