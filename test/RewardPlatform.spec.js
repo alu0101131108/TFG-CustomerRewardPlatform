@@ -24,7 +24,9 @@ async function rewardPlanConstructionStage(creatorContribution = 1000, signPerio
   const [newPlanAddress] = await getEventArguments(transaction, 'RewardPlanCreated');
   const abiFile = fs.readFileSync('artifacts/contracts/RewardPlan.sol/RewardPlan.json', 'utf8');
   const abi = JSON.parse(abiFile).abi;
-  const rewardPlan = new ethers.Contract(newPlanAddress, abi);
+
+  const accounts = await ethers.getSigners();
+  const rewardPlan = new ethers.Contract(newPlanAddress, abi, accounts[0]);
 
   return { rewardCenter, rewardPlan };
 }
@@ -59,9 +61,9 @@ describe('Reward Platform', function () {
     it('Should deploy RewardPlan with an initial 0 stage', async function () {
       const { rewardCenter, rewardPlan } = await loadFixture(rewardPlanConstructionStage);
       assert(rewardPlan.address === '0xCafac3dD18aC6c6e92c921884f9E4176737C052c');
-      let stage = await rewardPlan.stage;
-      console.log(Object.keys(stage));
-      // assert(stage == 0);
+
+      const stage = await rewardPlan.stage();
+      assert(stage === 0);
     });
 
     // it('Should change RewardPlans stage to 1', async function () {
