@@ -3,7 +3,6 @@ const { assert } = require('chai');
 const { time, loadFixture } = require('@nomicfoundation/hardhat-network-helpers');
 const { anyValue } = require('@nomicfoundation/hardhat-chai-matchers/withArgs');
 const fs = require('fs');
-const path = require("path");
 
 async function getEventArguments(transaction, expectedEvent) {
   const rc = await transaction.wait();
@@ -20,8 +19,10 @@ async function rewardCenterDeployed() {
 
 async function rewardPlanConstructionStage(creatorContribution = 1000, signPeriodDaysLimit = 1, transactionValue = ethers.utils.parseEther('1')) {
   const { rewardCenter } = await rewardCenterDeployed();
+
   const transaction = await rewardCenter.createRewardPlan(creatorContribution, signPeriodDaysLimit, { value: transactionValue });
   const [newPlanAddress] = await getEventArguments(transaction, 'RewardPlanCreated');
+
   const abiFile = fs.readFileSync('artifacts/contracts/RewardPlan.sol/RewardPlan.json', 'utf8');
   const abi = JSON.parse(abiFile).abi;
 
