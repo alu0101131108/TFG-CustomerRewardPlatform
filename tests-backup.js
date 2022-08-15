@@ -4,10 +4,6 @@ const { time, loadFixture } = require('@nomicfoundation/hardhat-network-helpers'
 const { anyValue } = require('@nomicfoundation/hardhat-chai-matchers/withArgs');
 const fs = require('fs');
 
-// Get contract ABIs. Can also be taken from <ContractFactory>.interface.
-const REWARD_CENTER_ABI = JSON.parse(fs.readFileSync('artifacts/contracts/RewardCenter.sol/RewardCenter.json', 'utf8')).abi;
-const REWARD_PLAN_ABI = JSON.parse(fs.readFileSync('artifacts/contracts/RewardPlan.sol/RewardPlan.json', 'utf8')).abi;
-
 async function getEventArguments(transaction, expectedEvent) {
   const rc = await transaction.wait();
   const event = rc.events.find(event => event.event = expectedEvent);
@@ -46,10 +42,7 @@ async function rewardPlanDeprecatedStage() {
 }
 
 describe('Reward Platform', function () {
-
-
   describe('Standard flow of use', function () {
-
     it('Should deploy RewardCenter and initialize its attributes', async function () {
       const { rewardCenter } = await loadFixture(rewardCenterDeployed);
       assert(rewardCenter.address !== undefined);
@@ -72,7 +65,5 @@ describe('Reward Platform', function () {
       const stage = await rewardPlan.stage();
       assert(stage === 2);
     });
-
   });
-
 });
