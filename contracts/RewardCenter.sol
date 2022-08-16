@@ -53,20 +53,14 @@ contract RewardCenter {
     2. Sign up msg.sender as entity. Once the plan expires, runningPlan counter will decrease untill 0 -> not active.
     3. Deploy and send funds to the new instance. Maybe gas should be considered.
     */
-  function createRewardPlan(
-    uint256 creatorContribution,
-    uint256 signPeriodDaysLimit
-  ) external payable returns (address) {
-    creatorContribution = creatorContribution * MILLIETHER_TO_WEI;
+  function createRewardPlan(uint256 signStageExpireTimestamp) external payable {
+    require(msg.value >= MIN_CREATOR_COLLAB, "Invalid collaboration amount");
     require(
-      msg.value >= MIN_CREATOR_COLLAB && msg.value >= creatorContribution,
-      "Invalid collaboration amount"
-    );
-    require(
-      signPeriodDaysLimit >= 0 && signPeriodDaysLimit <= MAX_SIGN_PERIOD_DAYS,
-      "Invalid sign period time limit"
+      signStageExpireTimestamp > block.timestamp,
+      "Invalid sign stage expire timestamp"
     );
 
+    // Sign up msg.sender as entity if its not already signed up.
     if (!entityRegistry[msg.sender].active) {
       entityRegistry[msg.sender] = EntityProfile(true, msg.sender, 0);
     }
@@ -74,40 +68,46 @@ contract RewardCenter {
       entityRegistry[msg.sender].runningPlans < 255,
       "Running plans limit reached"
     );
+
     entityRegistry[msg.sender].runningPlans++;
 
     RewardPlan plan = new RewardPlan(
       msg.sender,
-      creatorContribution,
-      signPeriodDaysLimit
+      msg.value,
+      signStageExpireTimestamp
     );
+
     entityRelatedPlans[msg.sender].push(address(plan));
-    planRegistry[address(plan)] = PlanProfile(
-      true,
-      msg.sender,
-      creatorContribution
-    );
-    require(payable(address(plan)).send(creatorContribution), "Payment failed");
+    planRegistry[address(plan)] = PlanProfile(true, msg.sender, msg.value);
+    require(payable(address(plan)).send(msg.value), "Payment failed");
 
     emit RewardPlanCreated(address(plan), msg.sender);
-
-    return address(plan);
   }
 
   function notifyFounderSigned(
     address founderAddress,
     uint256 collaborationAmount
   ) external onlyPlans {
-    // Sign as entity if not already signed. Also increase running plans counter.
-    if (entityRegistry[founderAddress].active) {
-      entityRegistry[founderAddress].runningPlans += 1;
-    } else {
-      entityRegistry[founderAddress] = EntityProfile(true, founderAddress, 1);
-    }
-    entityRelatedPlans[founderAddress].push(msg.sender);
+    // Founder must be signed up as an entity.
+    require(entityRegistry[founderAddress].active, "Entity is not signed up");
 
     // Increase plans balance by the founders collaboration amount.
     planRegistry[msg.sender].balance += collaborationAmount;
+  }
+
+  function notifyFounderAddedToPlan(address addr) external onlyPlans {
+    // Founder must be signed up as an entity.
+    require(entityRegistry[addr].active, "Entity is not signed up");
+
+    // Increase running plans
+    entityRegistry[addr].runningPlans++;
+    entityRelatedPlans[addr].push(msg.sender);
+  }
+
+  function signUpEntity(address addr) external onlyPlans {
+    if (!entityRegistry[addr].active) {
+      entityRegistry[addr] = EntityProfile(true, addr, 0);
+    }
   }
 
   function signUpClient(uint256 clientId, address addr) external onlyPlans {

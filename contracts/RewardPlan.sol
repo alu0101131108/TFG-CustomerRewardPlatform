@@ -21,7 +21,7 @@ contract RewardPlan {
 
   /* Constants */
   RewardCenter public rewardCenter;
-  uint256 public signPeriodTimeLimit;
+  uint256 public signStageExpireTimestamp;
   uint256 public deployDate;
 
   /* Rules */
@@ -30,6 +30,8 @@ contract RewardPlan {
 
   /* Client registries */
   mapping(uint256 => ClientSpends) public clientSpendsRegistry; /* Client Id -> Client Spends */
+
+  event FounderAdded(address founderAddress, uint256 collaborationAmount);
 
   modifier onlyRewardCenter() {
     require(
@@ -74,9 +76,9 @@ contract RewardPlan {
     _;
   }
 
-  modifier signPeriodExpired() {
+  modifier signStageExpired() {
     require(
-      block.timestamp > deployDate + signPeriodTimeLimit,
+      signStageExpireTimestamp <= block.timestamp,
       "Sign period not expired"
     );
     _;
@@ -85,13 +87,13 @@ contract RewardPlan {
   constructor(
     address creator,
     uint256 creatorContribution,
-    uint256 signPeriodDaysLimit_
+    uint256 signStageExpireTimestamp_
   ) {
     stage = Stages.CONSTRUCTION;
     rewardCenter = RewardCenter(payable(msg.sender));
     founders.push(Founder(creator, creatorContribution, false));
     deployDate = block.timestamp;
-    signPeriodTimeLimit = signPeriodDaysLimit_ * 1 days;
+    signStageExpireTimestamp = signStageExpireTimestamp_;
   }
 
   receive() external payable {}
@@ -141,10 +143,14 @@ contract RewardPlan {
     atStage(Stages.CONSTRUCTION)
     onlyFounders
   {
-    //(256 founders max)
-    founders.push(
-      Founder(addr, collaborationAmount * MILLIETHER_TO_WEI, false)
-    );
+    // 256 founders max
+    require(founders.length < 256, "Founders limit reached");
+
+    rewardCenter.signUpEntity(addr);
+    rewardCenter.notifyFounderAddedToPlan(addr);
+    founders.push(Founder(addr, collaborationAmount, false));
+
+    emit FounderAdded(addr, collaborationAmount);
   }
 
   function addNotifier(address addr)
@@ -219,7 +225,7 @@ contract RewardPlan {
   function signPeriodExpiredRefund()
     external
     atStages([Stages.CONSTRUCTION, Stages.SIGNING])
-    signPeriodExpired
+    signStageExpired
     onlyFounders
   {
     // If sign period has expired, return funds to every founder.

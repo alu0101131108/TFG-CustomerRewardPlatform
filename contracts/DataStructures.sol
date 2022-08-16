@@ -16,7 +16,7 @@ struct EntityProfile {
 
 struct PlanProfile {
   bool active;
-  address addr;
+  address creatorAddr;
   uint256 balance;
   // uint8 state; might be able to read it from the contract.
 }
