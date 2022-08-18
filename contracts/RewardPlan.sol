@@ -32,6 +32,10 @@ contract RewardPlan {
   mapping(uint256 => ClientSpends) public clientSpendsRegistry; /* Client Id -> Client Spends */
 
   event FounderAdded(address founderAddress, uint256 collaborationAmount);
+  event SpendRuleAdded(address founderAddress, uint256 spends, uint256 reward);
+  event NotifierAdded(address notifierAddress);
+  event FounderSigned(address signer, bool allSigned);
+  event ClientSignedUp(uint256 clientId, address clientAddress);
 
   modifier onlyRewardCenter() {
     require(
@@ -101,7 +105,7 @@ contract RewardPlan {
   /*
     PRIVATES
   */
-  function checkSignatures() private {
+  function checkSignatures() private returns (bool) {
     bool allSigned = true;
     for (uint8 i = 0; i < founders.length; i++) {
       if (!founders[i].signed) {
@@ -110,6 +114,7 @@ contract RewardPlan {
       }
     }
     if (allSigned) stage = Stages.ACTIVE;
+    return allSigned;
   }
 
   function checkItemRules() private {
@@ -158,18 +163,24 @@ contract RewardPlan {
     atStage(Stages.CONSTRUCTION)
     onlyFounders
   {
-    notifiers[addr] = Notifier(true);
+    notifiers[addr] = Notifier(true, msg.sender);
+    emit NotifierAdded(addr);
   }
 
   function addItemRule() external atStage(Stages.CONSTRUCTION) onlyFounders {
     // Not implemented yet
   }
 
-  function addSpendRule(
-    uint256 spendsAmount,
-    uint256 rewardAmount,
-    bool sorted
-  ) external atStage(Stages.CONSTRUCTION) onlyFounders {
+  // Maintains the spendRules array sorted from low to high spends.
+  function addSpendRule(uint256 spendsAmount, uint256 rewardAmount)
+    external
+    atStage(Stages.CONSTRUCTION)
+    onlyFounders
+  {
+    bool sorted = spendRules.length <= 0
+      ? true
+      : spendRules[spendRules.length - 1].spends <= spendsAmount;
+
     if (sorted) {
       spendRules.push(SpendRule(spendsAmount, rewardAmount));
     } else {
@@ -190,6 +201,7 @@ contract RewardPlan {
       }
       spendRules.push(insertRule);
     }
+    emit SpendRuleAdded(msg.sender, spendsAmount, rewardAmount);
   }
 
   /* ON SIGNING (or construction) */
@@ -219,7 +231,9 @@ contract RewardPlan {
     }
 
     if (stage == Stages.CONSTRUCTION) stage = Stages.SIGNING;
-    checkSignatures();
+    bool allSigned = checkSignatures();
+
+    emit FounderSigned(msg.sender, allSigned);
   }
 
   function signPeriodExpiredRefund()
@@ -248,6 +262,7 @@ contract RewardPlan {
     onlyNotifiers
   {
     rewardCenter.signUpClient(clientId, addr);
+    emit ClientSignedUp(clientId, addr);
   }
 
   function notifyItemsBought(uint256 clientId, ItemStack[] calldata items)

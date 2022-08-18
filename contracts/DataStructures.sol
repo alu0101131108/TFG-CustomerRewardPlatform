@@ -30,6 +30,7 @@ struct Founder {
 
 struct Notifier {
   bool active;
+  address addedBy;
 }
 
 struct ClientSpends {

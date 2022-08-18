@@ -17,21 +17,36 @@ const Stages = {
   DEPRECATED: 3
 }
 
+const creatorContribution = ethers.utils.parseEther('1');
+const entityBCollaborationAmount = ethers.utils.parseEther('1');
+const signStageNonRefundableDays = 30;
+const spendRules = {
+  A: {
+    spend: ethers.BigNumber.from('100'),
+    reward: ethers.BigNumber.from('1000')
+  },
+  B: {
+    spend: ethers.BigNumber.from('10000'),
+    reward: ethers.BigNumber.from('150000')
+  },
+  B2: {
+    spend: ethers.BigNumber.from('1000'),
+    reward: ethers.BigNumber.from('15000')
+  }
+}
+
 const env = {};
+
 
 describe('Expected flow of usage', function () {
 
-  // it('', async function () {
-  // });
-  const creatorContribution = ethers.utils.parseEther('1');
-  const entityBCollaborationAmount = ethers.utils.parseEther('1');
-  const signStageNonRefundableDays = 30;
+  it('Accounts setting (async requirement)', async function () {
+    [env.CenterAdmin, env.EntityA, env.EntityB, env.ClientA, env.ClientB, env.NotifierA, env.NotifierB] = await ethers.getSigners();
+    env.ClientA.id = ethers.BigNumber.from('11111111');
+    env.ClientB.id = ethers.BigNumber.from('99999999');
+  });
 
   describe('The Reward Center is deployed', function () {
-
-    it('Accounts setting (async requirement)', async function () {
-      [env.CenterAdmin, env.EntityA, env.EntityB, env.ClientA, env.ClientB, env.ClientC] = await ethers.getSigners();
-    });
 
     it('Should deploy correctly', async function () {
       const RewardCenter = await ethers.getContractFactory('RewardCenter');
@@ -177,20 +192,140 @@ describe('Expected flow of usage', function () {
 
   });
 
-  describe('Entity A adds some spend rules', function () {
+  describe('Entities A and B add some spend rules', function () {
+    it('Should emit an event when Entity A adds a spend rule', async function () {
+      env.rewardPlan = await env.rewardPlan.connect(env.EntityA);
+      const addSpendRuleTx = await env.rewardPlan.addSpendRule(spendRules.A.spend, spendRules.A.reward);
+      const [founder, spend, reward] = await getEventArguments(addSpendRuleTx, 'SpendRuleAdded');
+
+      expect(founder).to.equal(env.EntityA.address);
+      expect(spend.toString()).to.equal(spendRules.A.spend.toString());
+      expect(reward.toString()).to.equal(spendRules.A.reward.toString());
+    });
+
+    it('Should emit an event when Entity B adds a spend rule', async function () {
+      env.rewardPlan = await env.rewardPlan.connect(env.EntityB);
+      const addSpendRuleTx = await env.rewardPlan.addSpendRule(spendRules.B.spend, spendRules.B.reward);
+      const [founder, spend, reward] = await getEventArguments(addSpendRuleTx, 'SpendRuleAdded');
+
+      expect(founder).to.equal(env.EntityB.address);
+      expect(spend.toString()).to.equal(spendRules.B.spend.toString());
+      expect(reward.toString()).to.equal(spendRules.B.reward.toString());
+    });
+
+    it('Should mantain spend rules array sorted from low to high spends', async function () {
+      const addSpendRuleTx = await env.rewardPlan.addSpendRule(spendRules.B2.spend, spendRules.B2.reward);
+      const B2SpendRule = await env.rewardPlan.spendRules(1);
+
+      expect(B2SpendRule.spends.toString()).to.equal(spendRules.B2.spend.toString());
+      expect(B2SpendRule.reward.toString()).to.equal(spendRules.B2.reward.toString());
+    });
 
   });
 
   describe('Both founders add their notifier addresses', function () {
+    it('Should add entity A\'s notifier', async function () {
+      env.rewardPlan = await env.rewardPlan.connect(env.EntityA);
+      const addNotifierTx = await env.rewardPlan.addNotifier(env.NotifierA.address);
+      const [notifierAddress] = await getEventArguments(addNotifierTx, 'NotifierAdded');
 
+      expect(notifierAddress).to.equal(env.NotifierA.address);
+
+      const notifier = await env.rewardPlan.notifiers(env.NotifierA.address);
+
+      expect(notifier.addedBy).to.equal(env.EntityA.address);
+      expect(notifier.active).to.equal(true);
+    });
+
+    it('Should add entity B\'s notifier', async function () {
+      env.rewardPlan = await env.rewardPlan.connect(env.EntityB);
+      const addNotifierTx = await env.rewardPlan.addNotifier(env.NotifierB.address);
+      const [notifierAddress] = await getEventArguments(addNotifierTx, 'NotifierAdded');
+
+      expect(notifierAddress).to.equal(env.NotifierB.address);
+
+      const notifier = await env.rewardPlan.notifiers(env.NotifierB.address);
+
+      expect(notifier.addedBy).to.equal(env.EntityB.address);
+      expect(notifier.active).to.equal(true);
+    });
   });
 
   // Active
   describe('Both founders sign the plan, making it active', function () {
+    it('Should emit an event when Entity A signs the plan', async function () {
+      env.rewardPlan = await env.rewardPlan.connect(env.EntityA);
+      const signTx = await env.rewardPlan.sign();
+      const [signer, allSigned] = await getEventArguments(signTx, 'FounderSigned');
 
+      expect(signer).to.equal(env.EntityA.address);
+      expect(allSigned).to.equal(false);
+    });
+
+    it('Should emit an event when Entity B signs the plan', async function () {
+      env.rewardPlan = await env.rewardPlan.connect(env.EntityB);
+      const signTx = await env.rewardPlan.sign({ value: entityBCollaborationAmount });
+      const [signer, allSigned] = await getEventArguments(signTx, 'FounderSigned');
+
+      expect(signer).to.equal(env.EntityB.address);
+      expect(allSigned).to.equal(true);
+    });
+
+    it('Should be in the active stage now', async function () {
+      const stage = await env.rewardPlan.stage();
+
+      expect(stage).to.equal(Stages.ACTIVE);
+    });
+
+    it('Should update the plan\'s balance in the Reward Center plan registry', async function () {
+      const planProfile = await env.rewardCenter.planRegistry(env.rewardPlan.address);
+      const expectedBalance = creatorContribution.add(entityBCollaborationAmount);
+
+      expect(planProfile.balance.toString()).to.equal(expectedBalance.toString());
+    });
   });
 
-  describe('Customers A, B and C perform rewardable actions', function () {
+  describe('Clients A and B get signed up to the platform', function () {
+    it('Should emit an event when client A is signed up by Notifier A', async function () {
+      env.rewardPlan = env.rewardPlan.connect(env.NotifierA);
+      const signUpTx = await env.rewardPlan.signUpClient(env.ClientA.id, env.ClientA.address);
+      const [clientId, clientAddress] = await getEventArguments(signUpTx, 'ClientSignedUp');
+
+      expect(clientId.toString()).to.equal(env.ClientA.id.toString());
+      expect(clientAddress).to.equal(env.ClientA.address);
+    });
+
+    it('Should emit an event when client B is signed up by Notifier B', async function () {
+      env.rewardPlan = env.rewardPlan.connect(env.NotifierB);
+      const signUpTx = await env.rewardPlan.signUpClient(env.ClientB.id, env.ClientB.address);
+      const [clientId, clientAddress] = await getEventArguments(signUpTx, 'ClientSignedUp');
+
+      expect(clientId.toString()).to.equal(env.ClientB.id.toString());
+      expect(clientAddress).to.equal(env.ClientB.address);
+    });
+
+    it('Client A and B should appear in the Reward Center clients registry', async function () {
+      const profileA = await env.rewardCenter.clientRegistry(env.ClientA.id);
+      const profileB = await env.rewardCenter.clientRegistry(env.ClientB.id);
+
+      expect(profileA.active).to.equal(true);
+      expect(profileA.addr).to.equal(env.ClientA.address);
+      expect(profileA.balance.toString()).to.equal('0');
+
+      expect(profileB.active).to.equal(true);
+      expect(profileB.addr).to.equal(env.ClientB.address);
+      expect(profileB.balance.toString()).to.equal('0');
+    });
+  });
+
+  describe('Clients A and B spend money in the plan\'s related business', function () {
+    it('Should be notified that Client A spent money', async function () {
+      env.rewardPlan = env.rewardPlan.connect(env.NotifierB);
+
+    });
+  });
+
+  describe('Clients A and B get rewarded', function () {
 
   });
 
@@ -199,3 +334,7 @@ describe('Expected flow of usage', function () {
 
   });
 });
+
+
+// it('', async function () {
+// });
