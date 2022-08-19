@@ -5,6 +5,7 @@ pragma solidity ^0.8.9;
 import "./Constants.sol";
 import "./DataStructures.sol";
 import "./RewardCenter.sol";
+import "hardhat/console.sol";
 
 enum Stages {
   CONSTRUCTION,
@@ -36,6 +37,7 @@ contract RewardPlan {
   event NotifierAdded(address notifierAddress);
   event FounderSigned(address signer, bool allSigned);
   event ClientSignedUp(uint256 clientId, address clientAddress);
+  event AmountSpent(uint256 clientId, uint256 amount, uint256 grantedReward);
 
   modifier onlyRewardCenter() {
     require(
@@ -121,22 +123,36 @@ contract RewardPlan {
     // Not implemented yet
   }
 
-  function checkSpendRules(uint256 clientId) private {
+  function checkSpendRules(uint256 clientId) private returns (uint256) {
+    bool isDeprecated = !rewardCenter.isPlanActive(address(this));
     if (
+      isDeprecated ||
       spendRules.length == 0 ||
       spendRules[0].spends > clientSpendsRegistry[clientId].spends
-    ) return;
+    ) return 0;
+
+    uint256 rewardIndex;
     for (uint256 i = 0; i < spendRules.length; i++) {
-      if (spendRules[i].spends == clientSpendsRegistry[clientId].spends) {
-        clientSpendsRegistry[clientId].spends -= spendRules[i].spends;
-        rewardCenter.grantReward(clientId, spendRules[i].reward);
+      if (
+        spendRules[i].spends == clientSpendsRegistry[clientId].spends ||
+        (spendRules[i].spends < clientSpendsRegistry[clientId].spends &&
+          i == spendRules.length - 1)
+      ) {
+        rewardIndex = i;
         break;
       } else if (spendRules[i].spends > clientSpendsRegistry[clientId].spends) {
-        clientSpendsRegistry[clientId].spends -= spendRules[i - 1].spends;
-        rewardCenter.grantReward(clientId, spendRules[i - 1].reward);
+        rewardIndex = i - 1;
         break;
       }
     }
+
+    clientSpendsRegistry[clientId].spends -= spendRules[rewardIndex].spends;
+    uint256 rewardGranted = rewardCenter.grantReward(
+      clientId,
+      spendRules[rewardIndex].reward
+    );
+
+    return rewardGranted + checkSpendRules(clientId);
   }
 
   /*  
@@ -284,7 +300,9 @@ contract RewardPlan {
       clientSpendsRegistry[clientId].spends = 0;
     }
     clientSpendsRegistry[clientId].spends += amount;
-    checkSpendRules(clientId);
+    uint256 totalRewarded = checkSpendRules(clientId);
+
+    emit AmountSpent(clientId, amount, totalRewarded);
   }
 
   function deprecate() external atStage(Stages.ACTIVE) onlyRewardCenter {

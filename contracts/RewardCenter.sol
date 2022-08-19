@@ -5,6 +5,7 @@ pragma solidity ^0.8.9;
 import "./Constants.sol";
 import "./DataStructures.sol";
 import "./RewardPlan.sol";
+import "hardhat/console.sol";
 
 contract RewardCenter {
   mapping(uint256 => ClientProfile) public clientRegistry; // Numeric Id => Client Profile.
@@ -116,14 +117,25 @@ contract RewardCenter {
     clientRegistry[clientId] = ClientProfile(true, addr, 0);
   }
 
-  function grantReward(uint256 clientId, uint256 amount) external onlyPlans {
+  function grantReward(uint256 clientId, uint256 amount)
+    external
+    onlyPlans
+    returns (uint256)
+  {
     require(clientRegistry[clientId].active, "Client not registered");
 
     // Check if the plan can grant rewards, deprecate if its rewardTokens or eth balance is 0.
     bool isDeprecated = evaluatePlanDeprecation(payable(msg.sender));
-    if (!isDeprecated) {
-      clientRegistry[clientId].balance += amount;
+    if (isDeprecated) return 0;
+
+    // Adjust reward in case it surpases the plan balance.
+    if (planRegistry[msg.sender].balance < amount) {
+      amount = planRegistry[msg.sender].balance;
     }
+
+    clientRegistry[clientId].balance += amount;
+    planRegistry[msg.sender].balance -= amount;
+    return amount;
   }
 
   /* 
@@ -135,5 +147,9 @@ contract RewardCenter {
 
   function getSelfRelatedPlans() external view returns (address[] memory) {
     return entityRelatedPlans[msg.sender];
+  }
+
+  function isPlanActive(address target) external view returns (bool) {
+    return planRegistry[target].active;
   }
 }
