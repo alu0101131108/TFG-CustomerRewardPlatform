@@ -260,8 +260,8 @@ describe('Expected flow of usage', function () {
     });
   });
 
-  // Active
-  describe('Both founders sign the plan, making it active', function () {
+  // Signing
+  describe('Founder A signs the plan, making it transit to the SIGNING stage', function () {
     it('Should emit an event when Entity A signs the plan', async function () {
       env.rewardPlan = await env.rewardPlan.connect(env.EntityA);
       const signTx = await env.rewardPlan.sign();
@@ -277,6 +277,20 @@ describe('Expected flow of usage', function () {
       expect(stage).to.equal(Stages.SIGNING);
     });
 
+    it('Should not be able to call the refund method', async function () {
+      env.rewardPlan = await env.rewardPlan.connect(env.EntityA);
+
+      try {
+        await env.rewardPlan.signPeriodExpiredRefund();
+      }
+      catch (error) {
+        expect(error.message).to.equal('VM Exception while processing transaction: reverted with reason string \'Sign period not expired\'');
+      }
+    });
+  });
+
+  // Active
+  describe('Founder B sign the plan, making it transit to the ACTIVE stage', function () {
     it('Should emit an event when Entity B signs the plan', async function () {
       env.rewardPlan = await env.rewardPlan.connect(env.EntityB);
       const signTx = await env.rewardPlan.sign({ value: entityBCollaborationAmount });
