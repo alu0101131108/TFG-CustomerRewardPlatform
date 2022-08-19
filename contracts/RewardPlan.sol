@@ -164,7 +164,10 @@ contract RewardPlan {
     atStage(Stages.CONSTRUCTION)
     onlyFounders
   {
-    // 256 founders max
+    // Can not add a founder twice and 256 founders is the maximum.
+    for (uint8 i = 0; i < founders.length; i++) {
+      require(founders[i].addr != addr, "Founder already added");
+    }
     require(founders.length < 256, "Founders limit reached");
 
     rewardCenter.signUpEntity(addr);

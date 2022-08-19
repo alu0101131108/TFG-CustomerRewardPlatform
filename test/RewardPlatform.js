@@ -441,6 +441,20 @@ describe('Expected flow of usage', function () {
       expect(planProfile.active).to.equal(false);
       expect(planProfile.balance.toString()).to.equal('0');
     });
+
+    it('Should also sign out both entities from Reward Center registry', async function () {
+      const entityAProfile = await env.rewardCenter.clientRegistry(env.EntityA.address);
+      const entityBProfile = await env.rewardCenter.clientRegistry(env.EntityB.address);
+
+      expect(entityAProfile.active).to.equal(false);
+      expect(entityBProfile.active).to.equal(false);
+    });
   });
 
+  describe('Test', function () {
+    it('Test', async function () {
+      const rpEthBalance = await env.rewardPlan.getContractBalance();
+      console.log("RP: ", rpEthBalance.toString());
+    });
+  });
 });
