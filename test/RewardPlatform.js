@@ -451,10 +451,10 @@ describe('Expected flow of usage', function () {
     });
   });
 
-  describe('Test', function () {
-    it('Test', async function () {
-      const rpEthBalance = await env.rewardPlan.getContractBalance();
-      console.log("RP: ", rpEthBalance.toString());
-    });
-  });
+  // describe('Test', function () {
+  //   it('Test', async function () {
+  //     const rpEthBalance = await env.rewardPlan.getContractBalance();
+  //     console.log("RP: ", rpEthBalance.toString());
+  //   });
+  // });
 });

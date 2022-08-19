@@ -5,7 +5,8 @@ pragma solidity ^0.8.9;
 import "./Constants.sol";
 import "./DataStructures.sol";
 import "./RewardPlan.sol";
-import "hardhat/console.sol";
+
+// import "hardhat/console.sol";
 
 contract RewardCenter {
   mapping(uint256 => ClientProfile) public clientRegistry; // Numeric Id => Client Profile.
