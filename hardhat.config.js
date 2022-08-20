@@ -1,5 +1,10 @@
+const { config } = require("dotenv");
+
 require("@nomicfoundation/hardhat-toolbox");
 require("solidity-coverage");
+require("dotenv").config();
+
+const COINMARKETCAP_API_KEY = process.env.COINMARKETCAP_API_KEY;
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -12,4 +17,11 @@ module.exports = {
     }
   },
   defaultNetwork: "hardhat",
+  gasReporter: {
+    enabled: true,
+    outputFile: "gas-reporter.txt",
+    noColors: true,
+    currency: "EUR",
+    coinmarketcap: COINMARKETCAP_API_KEY
+  }
 };

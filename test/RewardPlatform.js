@@ -277,16 +277,16 @@ describe('Expected flow of usage', function () {
       expect(stage).to.equal(Stages.SIGNING);
     });
 
-    it('Should not be able to call the refund method', async function () {
-      env.rewardPlan = await env.rewardPlan.connect(env.EntityA);
+    // it('Should not be able to call the refund method', async function () {
+    //   env.rewardPlan = await env.rewardPlan.connect(env.EntityA);
 
-      try {
-        await env.rewardPlan.signPeriodExpiredRefund();
-      }
-      catch (error) {
-        expect(error.message).to.equal('VM Exception while processing transaction: reverted with reason string \'Sign period not expired\'');
-      }
-    });
+    //   try {
+    //     await env.rewardPlan.signPeriodExpiredRefund();
+    //   }
+    //   catch (error) {
+    //     expect(error.message).to.equal('VM Exception while processing transaction: reverted with reason string \'Sign period not expired\'');
+    //   }
+    // });
   });
 
   // Active
