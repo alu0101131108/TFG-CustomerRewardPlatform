@@ -5,6 +5,7 @@ pragma solidity ^0.8.9;
 import "./Constants.sol";
 import "./DataStructures.sol";
 import "./RewardCenter.sol";
+
 // import "hardhat/console.sol";
 
 enum Stages {
@@ -26,8 +27,7 @@ contract RewardPlan {
   uint256 public deployDate;
 
   /* Rules */
-  SpendRule[] public spendRules; /* Sorted low to high reward*/
-  // Rule[] rules; --> [rule 0: {[{item0, cuantity0}, {item1, cuantity1}], rewardAmount}, rule 1: {}, ...].
+  SpendRule[] public spendRules; /* Sorted low to high spends*/
 
   /* Client registries */
   mapping(uint256 => ClientSpends) public clientSpendsRegistry; /* Client Id -> Client Spends */
@@ -119,10 +119,6 @@ contract RewardPlan {
     return allSigned;
   }
 
-  function checkItemRules() private {
-    // Not implemented yet
-  }
-
   function checkSpendRules(uint256 clientId) private returns (uint256) {
     bool isDeprecated = !rewardCenter.isPlanActive(address(this));
     if (
@@ -147,7 +143,8 @@ contract RewardPlan {
     }
 
     clientSpendsRegistry[clientId].spends -= spendRules[rewardIndex].spends;
-    uint256 rewardGranted = rewardCenter.grantReward(
+
+    uint256 rewardGranted = rewardCenter.notifyRewardGranted(
       clientId,
       spendRules[rewardIndex].reward
     );
@@ -184,10 +181,6 @@ contract RewardPlan {
   {
     notifiers[addr] = Notifier(true, msg.sender);
     emit NotifierAdded(addr);
-  }
-
-  function addItemRule() external atStage(Stages.CONSTRUCTION) onlyFounders {
-    // Not implemented yet
   }
 
   // Maintains the spendRules array sorted from low to high spends.
@@ -240,10 +233,6 @@ contract RewardPlan {
         if (msg.sender == founders[i].addr && !founders[i].signed) {
           require(msg.value >= founders[i].collaborationAmount);
           founders[i].signed = true;
-          rewardCenter.notifyFounderSigned(
-            msg.sender,
-            founders[i].collaborationAmount
-          );
           break;
         }
       }
@@ -284,15 +273,6 @@ contract RewardPlan {
     emit ClientSignedUp(clientId, addr);
   }
 
-  function notifyItemsBought(uint256 clientId, ItemStack[] calldata items)
-    external
-    atStage(Stages.ACTIVE)
-    onlyNotifiers
-  {
-    // Add items to the registry.
-    // Check items reward rules logic.
-  }
-
   function notifyAmountSpent(uint256 clientId, uint256 amount)
     external
     atStage(Stages.ACTIVE)
@@ -304,6 +284,8 @@ contract RewardPlan {
     }
     clientSpendsRegistry[clientId].spends += amount;
     uint256 totalRewarded = checkSpendRules(clientId);
+
+    // if totalRewarded > 0 then sendTokensReward.
 
     emit AmountSpent(clientId, amount, totalRewarded);
   }

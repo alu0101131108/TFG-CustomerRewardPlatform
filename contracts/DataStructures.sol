@@ -5,7 +5,7 @@ pragma solidity ^0.8.9;
 struct ClientProfile {
   bool active;
   address addr;
-  uint256 balance;
+  uint256 rewards;
 }
 
 struct EntityProfile {
@@ -17,14 +17,12 @@ struct EntityProfile {
 struct PlanProfile {
   bool active;
   address creatorAddr;
-  uint256 balance;
-  // uint8 state; might be able to read it from the contract.
+  uint256 totalRewarded;
 }
 
 struct Founder {
   address addr;
   uint256 collaborationAmount;
-  // IntRange[] itemIdRange;
   bool signed;
 }
 
@@ -38,29 +36,7 @@ struct ClientSpends {
   uint256 spends;
 }
 
-// struct IntRange {
-//    int256 min;
-//    int256 max;
-// }
-
-// struct Rule {
-//    ItemStack[] items;
-//    int256 rewardAmount;
-// }
-
 struct SpendRule {
   uint256 spends;
   uint256 reward;
-}
-
-struct ItemStack {
-  int256 id;
-  int256 amount;
-}
-
-struct rewardPlanConfig {
-  bool isPrivate;
-  address[] founders;
-  int256[] expectedFundsPerFounder;
-  // ...
 }

@@ -30,10 +30,7 @@ contract RewardCenter {
     private
     returns (bool)
   {
-    if (
-      planRegistry[planAddr].balance <= 0 ||
-      planAddr.balance <= MIN_PLAN_ETH_BALANCE
-    ) {
+    if (planAddr.balance <= 0) {
       RewardPlan TargetPlan = RewardPlan(planAddr);
       TargetPlan.deprecate();
       address[] memory founderAddresses = TargetPlan.getFounderAddresses();
@@ -80,21 +77,10 @@ contract RewardCenter {
     );
 
     entityRelatedPlans[msg.sender].push(address(plan));
-    planRegistry[address(plan)] = PlanProfile(true, msg.sender, msg.value);
+    planRegistry[address(plan)] = PlanProfile(true, msg.sender, 0);
     require(payable(address(plan)).send(msg.value), "Payment failed");
 
     emit RewardPlanCreated(address(plan), msg.sender);
-  }
-
-  function notifyFounderSigned(
-    address founderAddress,
-    uint256 collaborationAmount
-  ) external onlyPlans {
-    // Founder must be signed up as an entity.
-    require(entityRegistry[founderAddress].active, "Entity is not signed up");
-
-    // Increase plans balance by the founders collaboration amount.
-    planRegistry[msg.sender].balance += collaborationAmount;
   }
 
   function notifyFounderAddedToPlan(address addr) external onlyPlans {
@@ -118,24 +104,24 @@ contract RewardCenter {
     clientRegistry[clientId] = ClientProfile(true, addr, 0);
   }
 
-  function grantReward(uint256 clientId, uint256 amount)
+  function notifyRewardGranted(uint256 clientId, uint256 amount)
     external
     onlyPlans
     returns (uint256)
   {
     require(clientRegistry[clientId].active, "Client not registered");
 
-    // Check if the plan can grant rewards, deprecate if its rewardTokens or eth balance is 0.
+    // Check if the plan can grant rewards, deprecate if its balance is 0.
     bool isDeprecated = evaluatePlanDeprecation(payable(msg.sender));
     if (isDeprecated) return 0;
 
     // Adjust reward in case it surpases the plan balance.
-    if (planRegistry[msg.sender].balance < amount) {
-      amount = planRegistry[msg.sender].balance;
+    if (msg.sender.balance < amount) {
+      amount = msg.sender.balance;
     }
 
-    clientRegistry[clientId].balance += amount;
-    planRegistry[msg.sender].balance -= amount;
+    clientRegistry[clientId].rewards += amount;
+    planRegistry[msg.sender].totalRewarded += amount;
     return amount;
   }
 
