@@ -31,12 +31,12 @@ struct Notifier {
   address addedBy;
 }
 
-struct ClientSpends {
+struct ClientPoints {
   bool active;
-  uint256 spends;
+  uint256 points;
 }
 
-struct SpendRule {
-  uint256 spends;
+struct RewardPointRule {
+  uint256 points;
   uint256 reward;
 }

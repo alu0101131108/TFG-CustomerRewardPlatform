@@ -12,29 +12,33 @@ enum Stages {
   CONSTRUCTION,
   SIGNING,
   ACTIVE,
-  DEPRECATED
+  SLEEPING
 }
 
 contract RewardPlan {
   /* Main attributes */
   Stages public stage;
-  Founder[] public founders; /* Creator is always at index 0. */
+  address public creator;
+  Founder[] public founders;
   mapping(address => Notifier) public notifiers;
 
   /* Constants */
   RewardCenter public rewardCenter;
-  uint256 public signStageExpireTimestamp;
-  uint256 public deployDate;
+
+  uint256 public nonRefundableDuration;
+  uint256 public allowRefundTimestamp;
+  uint256 public activationTimestamp;
 
   /* Rules */
-  SpendRule[] public spendRules; /* Sorted low to high spends*/
+  RewardPointRule[] public rewardPointsRules; /* Sorted low to high points*/
 
   /* Client registries */
-  mapping(uint256 => ClientSpends) public clientSpendsRegistry; /* Client Id -> Client Spends */
+  mapping(uint256 => ClientPoints) public rewardPointsRegistry; /* Client Id -> Client Spends */
 
   event FounderAdded(address founderAddress, uint256 collaborationAmount);
-  event SpendRuleAdded(address founderAddress, uint256 spends, uint256 reward);
-  event NotifierAdded(address notifierAddress);
+  event SpendRuleAdded(address founderAddress, uint256 points, uint256 reward);
+  event NotifierAdded(address notifierAddress, address addedBy);
+  event SigningStageBegun(address caller);
   event FounderSigned(address signer, bool allSigned);
   event ClientSignedUp(uint256 clientId, address clientAddress);
   event AmountSpent(uint256 clientId, uint256 amount, uint256 grantedReward);
@@ -44,6 +48,20 @@ contract RewardPlan {
       msg.sender == address(rewardCenter),
       "Only reward center authorized"
     );
+    _;
+  }
+
+  modifier onlyFoundersOrCreator() {
+    if (msg.sender != creator) {
+      bool allowed = false;
+      for (uint8 i = 0; i < founders.length; i++) {
+        if (msg.sender == founders[i].addr) {
+          allowed = true;
+          break;
+        }
+      }
+      require(allowed, "Only founders authorized");
+    }
     _;
   }
 
@@ -61,6 +79,16 @@ contract RewardPlan {
 
   modifier onlyNotifiers() {
     require(notifiers[msg.sender].active, "Only notifiers authorized");
+    bool parentFounderActive = false;
+    for (uint8 i = 0; i < founders.length; i++) {
+      if (founders[i].addr == notifiers[msg.sender].addedBy) {
+        parentFounderActive = true;
+      }
+    }
+    require(
+      parentFounderActive,
+      "Notifier is not valid since its parent is not a founder"
+    );
     _;
   }
 
@@ -69,37 +97,20 @@ contract RewardPlan {
     _;
   }
 
-  modifier atStages(Stages[2] memory allowedStages) {
-    /* Invalid conversion from dynamic sized array to fixed size array. (To investigate) -> Single line dynamic array not supported. */
-    bool allowed = false;
-    for (uint8 i = 0; i < allowedStages.length; i++) {
-      if (stage == allowedStages[i]) {
-        allowed = true;
-        break;
-      }
-    }
-    require(allowed, "Not allowed at current stage");
-    _;
-  }
-
-  modifier signStageExpired() {
+  modifier refundIsAllowed() {
     require(
-      signStageExpireTimestamp <= block.timestamp,
-      "Sign period not expired"
+      allowRefundTimestamp <= block.timestamp,
+      "Refunds are not allowed yet"
     );
     _;
   }
 
-  constructor(
-    address creator,
-    uint256 creatorContribution,
-    uint256 signStageExpireTimestamp_
-  ) {
+  constructor(address creator_, uint256 nonRefundableDuration_) {
+    creator = creator_;
+    nonRefundableDuration = nonRefundableDuration_;
+    allowRefundTimestamp = block.timestamp + nonRefundableDuration_;
     stage = Stages.CONSTRUCTION;
-    rewardCenter = RewardCenter(payable(msg.sender));
-    founders.push(Founder(creator, creatorContribution, false));
-    deployDate = block.timestamp;
-    signStageExpireTimestamp = signStageExpireTimestamp_;
+    rewardCenter = RewardCenter(msg.sender);
   }
 
   receive() external payable {}
@@ -107,7 +118,7 @@ contract RewardPlan {
   /*
     PRIVATES
   */
-  function checkSignatures() private returns (bool) {
+  function checkSignatures() private view returns (bool) {
     bool allSigned = true;
     for (uint8 i = 0; i < founders.length; i++) {
       if (!founders[i].signed) {
@@ -115,152 +126,178 @@ contract RewardPlan {
         break;
       }
     }
-    if (allSigned) stage = Stages.ACTIVE;
     return allSigned;
   }
 
-  function checkSpendRules(uint256 clientId) private returns (uint256) {
-    bool isDeprecated = !rewardCenter.isPlanActive(address(this));
-    if (
-      isDeprecated ||
-      spendRules.length == 0 ||
-      spendRules[0].spends > clientSpendsRegistry[clientId].spends
-    ) return 0;
+  function checkSpendRules(uint256 clientId, uint256 amountAccumulator)
+    private
+    atStage(Stages.ACTIVE)
+    returns (uint256)
+  {
+    require(rewardPointsRules.length > 0, "No spend rules defined");
 
+    // In case none of the reward rules satisfy the points.
+    if (rewardPointsRules[0].points > rewardPointsRegistry[clientId].points)
+      return 0;
+
+    // Look for the best reward rule that satisfies the points.
     uint256 rewardIndex;
-    for (uint256 i = 0; i < spendRules.length; i++) {
+    for (uint256 i = 0; i < rewardPointsRules.length; i++) {
       if (
-        spendRules[i].spends == clientSpendsRegistry[clientId].spends ||
-        (spendRules[i].spends < clientSpendsRegistry[clientId].spends &&
-          i == spendRules.length - 1)
+        rewardPointsRules[i].points == rewardPointsRegistry[clientId].points ||
+        (rewardPointsRules[i].points < rewardPointsRegistry[clientId].points &&
+          i == rewardPointsRules.length - 1)
       ) {
         rewardIndex = i;
         break;
-      } else if (spendRules[i].spends > clientSpendsRegistry[clientId].spends) {
+      } else if (
+        rewardPointsRules[i].points > rewardPointsRegistry[clientId].points
+      ) {
         rewardIndex = i - 1;
         break;
       }
     }
 
-    clientSpendsRegistry[clientId].spends -= spendRules[rewardIndex].spends;
+    // In case the plan is out of funds, reward the rest.
+    if (
+      address(this).balance <
+      rewardPointsRules[rewardIndex].reward + amountAccumulator
+    ) {
+      uint256 fixedRuleSpends = (address(this).balance *
+        rewardPointsRules[rewardIndex].points) /
+        rewardPointsRules[rewardIndex].reward;
+      rewardPointsRegistry[clientId].points -= fixedRuleSpends;
+      stage = Stages.SLEEPING;
+      return address(this).balance;
+    }
 
-    uint256 rewardGranted = rewardCenter.notifyRewardGranted(
-      clientId,
-      spendRules[rewardIndex].reward
-    );
-
-    return rewardGranted + checkSpendRules(clientId);
+    // Else consider the full reward and other possible ones.
+    rewardPointsRegistry[clientId].points -= rewardPointsRules[rewardIndex]
+      .points;
+    return
+      rewardPointsRules[rewardIndex].reward +
+      checkSpendRules(
+        clientId,
+        rewardPointsRules[rewardIndex].reward + amountAccumulator
+      );
   }
 
   /*  
     EXTERNALS
   */
-  /* ON CONSTRUCTION (Might need edit/remove also)*/
-  function addFounder(address addr, uint256 collaborationAmount)
+  /* ON CONSTRUCTION */
+  function addFounder(address founderAddress, uint256 collaborationAmount)
     external
     atStage(Stages.CONSTRUCTION)
-    onlyFounders
+    onlyFoundersOrCreator
   {
     // Can not add a founder twice and 256 founders is the maximum.
-    for (uint8 i = 0; i < founders.length; i++) {
-      require(founders[i].addr != addr, "Founder already added");
-    }
     require(founders.length < 256, "Founders limit reached");
+    for (uint8 i = 0; i < founders.length; i++) {
+      require(founders[i].addr != founderAddress, "Founder already added");
+    }
 
-    rewardCenter.signUpEntity(addr);
-    rewardCenter.notifyFounderAddedToPlan(addr);
-    founders.push(Founder(addr, collaborationAmount, false));
+    rewardCenter.notifyFounderAddedToPlan(founderAddress);
+    founders.push(Founder(founderAddress, collaborationAmount, false));
 
-    emit FounderAdded(addr, collaborationAmount);
+    emit FounderAdded(founderAddress, collaborationAmount);
   }
 
-  function addNotifier(address addr)
+  function addNotifier(address notifierAddress)
     external
     atStage(Stages.CONSTRUCTION)
     onlyFounders
   {
-    notifiers[addr] = Notifier(true, msg.sender);
-    emit NotifierAdded(addr);
+    require(!notifiers[notifierAddress].active, "Notifier already added");
+    notifiers[notifierAddress] = Notifier(true, msg.sender);
+    emit NotifierAdded(notifierAddress, msg.sender);
   }
 
-  // Maintains the spendRules array sorted from low to high spends.
+  // Maintains the rewardPointsRules array sorted from low to high points.
   function addSpendRule(uint256 spendsAmount, uint256 rewardAmount)
     external
     atStage(Stages.CONSTRUCTION)
     onlyFounders
   {
-    bool sorted = spendRules.length <= 0
+    bool sorted = rewardPointsRules.length <= 0
       ? true
-      : spendRules[spendRules.length - 1].spends <= spendsAmount;
+      : rewardPointsRules[rewardPointsRules.length - 1].points <= spendsAmount;
 
     if (sorted) {
-      spendRules.push(SpendRule(spendsAmount, rewardAmount));
+      rewardPointsRules.push(RewardPointRule(spendsAmount, rewardAmount));
     } else {
-      uint256 firstGreaterIndex = spendRules.length;
-      SpendRule memory insertRule = SpendRule(spendsAmount, rewardAmount);
-      SpendRule memory auxRule;
-      for (uint256 i = 0; i < spendRules.length; i++) {
+      uint256 firstGreaterIndex = rewardPointsRules.length;
+      RewardPointRule memory insertRule = RewardPointRule(
+        spendsAmount,
+        rewardAmount
+      );
+      RewardPointRule memory auxRule;
+      for (uint256 i = 0; i < rewardPointsRules.length; i++) {
         // Index search, can be optimized.
-        if (spendRules[i].spends > spendsAmount) {
+        if (rewardPointsRules[i].points > spendsAmount) {
           firstGreaterIndex = i;
           break;
         }
       }
-      for (uint256 i = firstGreaterIndex; i < spendRules.length; i++) {
-        auxRule = spendRules[i];
-        spendRules[i] = insertRule;
+      for (uint256 i = firstGreaterIndex; i < rewardPointsRules.length; i++) {
+        auxRule = rewardPointsRules[i];
+        rewardPointsRules[i] = insertRule;
         insertRule = auxRule;
       }
-      spendRules.push(insertRule);
+      rewardPointsRules.push(insertRule);
     }
     emit SpendRuleAdded(msg.sender, spendsAmount, rewardAmount);
   }
 
-  /* ON SIGNING (or construction) */
-  function sign()
+  function beginSigningStage()
     external
-    payable
-    atStages([Stages.CONSTRUCTION, Stages.SIGNING])
+    atStage(Stages.CONSTRUCTION)
     onlyFounders
   {
-    // The first founder can sign without paying. Already paid during construction.
-    if (founders[0].addr == msg.sender) {
-      founders[0].signed = true;
-    }
-    // The other founders can pay to sign.
-    else {
-      for (uint8 i = 1; i < founders.length; i++) {
-        if (msg.sender == founders[i].addr && !founders[i].signed) {
-          require(msg.value >= founders[i].collaborationAmount);
-          founders[i].signed = true;
-          break;
-        }
+    stage = Stages.SIGNING;
+    emit SigningStageBegun(msg.sender);
+  }
+
+  function sign() external payable atStage(Stages.SIGNING) onlyFounders {
+    for (uint8 i = 1; i < founders.length; i++) {
+      if (msg.sender == founders[i].addr) {
+        require(!founders[i].signed, "Founder already signed");
+        require(
+          msg.value == founders[i].collaborationAmount,
+          "Wrong collaboration amount"
+        );
+        founders[i].signed = true;
+        break;
       }
     }
 
-    if (stage == Stages.CONSTRUCTION) stage = Stages.SIGNING;
     bool allSigned = checkSignatures();
-
+    if (allSigned) stage = Stages.ACTIVE;
     emit FounderSigned(msg.sender, allSigned);
   }
 
-  function signPeriodExpiredRefund()
+  function refundAndReset()
     external
-    atStages([Stages.CONSTRUCTION, Stages.SIGNING])
-    signStageExpired
+    atStage(Stages.SIGNING)
+    refundIsAllowed
     onlyFounders
   {
-    // If sign period has expired, return funds to every founder.
+    // Refund collaboration amounts to each founder.
     for (uint8 i = 0; i < founders.length; i++) {
       if (founders[i].signed) {
         founders[i].signed = false;
         require(
-          payable(founders[i].addr).send(founders[i].collaborationAmount),
+          payable(founders[i].addr).send(founders[i].collaborationAmount), // fix
           "Payment failed"
         );
       }
     }
-    stage = Stages.DEPRECATED;
+
+    // Reset the plan.
+    stage = Stages.CONSTRUCTION;
+    allowRefundTimestamp = block.timestamp + nonRefundableDuration;
+    delete founders;
+    delete rewardPointsRules;
   }
 
   /* ON ACTIVE */
@@ -273,34 +310,34 @@ contract RewardPlan {
     emit ClientSignedUp(clientId, addr);
   }
 
-  function notifyAmountSpent(uint256 clientId, uint256 amount)
+  function notifyPointsAwarded(uint256 clientId, uint256 amount)
     external
     atStage(Stages.ACTIVE)
     onlyNotifiers
   {
-    if (!clientSpendsRegistry[clientId].active) {
-      clientSpendsRegistry[clientId].active = true;
-      clientSpendsRegistry[clientId].spends = 0;
+    // Register client if needed and add the amount.
+    if (!rewardPointsRegistry[clientId].active) {
+      rewardPointsRegistry[clientId].active = true;
+      rewardPointsRegistry[clientId].points = 0;
     }
-    clientSpendsRegistry[clientId].spends += amount;
-    uint256 totalRewarded = checkSpendRules(clientId);
+    rewardPointsRegistry[clientId].points += amount;
 
-    // if totalRewarded > 0 then sendTokensReward.
+    // Grant reward if there is any.
+    uint256 totalRewarded = checkSpendRules(clientId, 0);
+
+    if (totalRewarded > 0) {
+      require(
+        payable(rewardCenter.getClientAddress(clientId)).send(totalRewarded), // fix
+        "Payment failed"
+      );
+    }
 
     emit AmountSpent(clientId, amount, totalRewarded);
   }
 
-  function deprecate() external atStage(Stages.ACTIVE) onlyRewardCenter {
-    stage = Stages.DEPRECATED;
-  }
-
   /* 
-    Views 
+    Getters
   */
-  function getCreator() external view returns (Founder memory) {
-    return founders[0];
-  }
-
   function getContractBalance() external view returns (uint256) {
     return address(this).balance;
   }
@@ -313,14 +350,3 @@ contract RewardPlan {
     return addresses;
   }
 }
-
-/*
-  Client fidelity measures:  Amount of spends or Items bought (Maybe).
-  Reward options: Tokens or Non Fungible Sale Tickets.
-
-  This leaves 4 possible combinations:
-   - X amount of spends -> Tokens reward.
-   - X amount of spends -> Non Fungible Sale Ticket reward.
-   - X Items bought -> Tokens reward. (Maybe)
-   - X Items bought -> Non Fungible Sale Ticket reward. (Maybe)
-*/

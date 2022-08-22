@@ -14,7 +14,6 @@ contract RewardCenter {
   mapping(address => PlanProfile) public planRegistry; // Address => Reward Plan Profile.
   mapping(address => address[]) public entityRelatedPlans; // Address => Plan adress array.
 
-  // Event for when plan is created, with plan address, creator address and transaction gas price.
   event RewardPlanCreated(address planAddress, address creator);
 
   modifier onlyPlans() {
@@ -24,77 +23,40 @@ contract RewardCenter {
 
   constructor() {}
 
-  receive() external payable {}
+  // receive() external payable {}
 
-  function evaluatePlanDeprecation(address payable planAddr)
-    private
-    returns (bool)
-  {
-    if (planAddr.balance <= 0) {
-      RewardPlan TargetPlan = RewardPlan(planAddr);
-      TargetPlan.deprecate();
-      address[] memory founderAddresses = TargetPlan.getFounderAddresses();
-      for (uint8 i = 0; i < founderAddresses.length; i++) {
-        entityRegistry[founderAddresses[i]].runningPlans--;
-        if (entityRegistry[founderAddresses[i]].runningPlans == 0) {
-          entityRegistry[founderAddresses[i]].active = false;
-        }
-      }
-      planRegistry[planAddr].active = false;
-      return true;
-    }
-    return false;
-  }
-
-  /**
-    Deploy a new instance of RewardPlan.
-    1. Require buying a certain amount of tokens.
-    2. Sign up msg.sender as entity. Once the plan expires, runningPlan counter will decrease untill 0 -> not active.
-    3. Deploy and send funds to the new instance. Maybe gas should be considered.
-    */
-  function createRewardPlan(uint256 signStageExpireTimestamp) external payable {
-    require(msg.value >= MIN_CREATOR_COLLAB, "Invalid collaboration amount");
-    require(
-      signStageExpireTimestamp > block.timestamp,
-      "Invalid sign stage expire timestamp"
-    );
-
-    // Sign up msg.sender as entity if its not already signed up.
-    if (!entityRegistry[msg.sender].active) {
-      entityRegistry[msg.sender] = EntityProfile(true, msg.sender, 0);
-    }
+  function createRewardPlan(uint256 refundNotAllowedDuration) external {
+    signUpEntity(msg.sender);
     require(
       entityRegistry[msg.sender].runningPlans < 255,
       "Running plans limit reached"
     );
-
     entityRegistry[msg.sender].runningPlans++;
 
-    RewardPlan plan = new RewardPlan(
-      msg.sender,
-      msg.value,
-      signStageExpireTimestamp
-    );
+    RewardPlan plan = new RewardPlan(msg.sender, refundNotAllowedDuration);
 
     entityRelatedPlans[msg.sender].push(address(plan));
     planRegistry[address(plan)] = PlanProfile(true, msg.sender, 0);
-    require(payable(address(plan)).send(msg.value), "Payment failed");
 
     emit RewardPlanCreated(address(plan), msg.sender);
   }
 
-  function notifyFounderAddedToPlan(address addr) external onlyPlans {
-    // Founder must be signed up as an entity.
-    require(entityRegistry[addr].active, "Entity is not signed up");
-
-    // Increase running plans
-    entityRegistry[addr].runningPlans++;
-    entityRelatedPlans[addr].push(msg.sender);
+  function notifyFounderAddedToPlan(address founderAddress) external onlyPlans {
+    signUpEntity(founderAddress);
+    require(
+      entityRegistry[founderAddress].runningPlans < 255,
+      "Founder added reached de plans limit"
+    );
+    if (planRegistry[msg.sender].creatorAddr != founderAddress) {
+      entityRegistry[founderAddress].runningPlans++;
+      entityRelatedPlans[founderAddress].push(msg.sender);
+    }
   }
 
-  function signUpEntity(address addr) external onlyPlans {
-    if (!entityRegistry[addr].active) {
-      entityRegistry[addr] = EntityProfile(true, addr, 0);
+  // Will be called only by creating a plan or being added to one.
+  function signUpEntity(address founderAddress) private {
+    if (!entityRegistry[founderAddress].active) {
+      entityRegistry[founderAddress] = EntityProfile(true, founderAddress, 0);
     }
   }
 
@@ -107,26 +69,15 @@ contract RewardCenter {
   function notifyRewardGranted(uint256 clientId, uint256 amount)
     external
     onlyPlans
-    returns (uint256)
   {
     require(clientRegistry[clientId].active, "Client not registered");
 
-    // Check if the plan can grant rewards, deprecate if its balance is 0.
-    bool isDeprecated = evaluatePlanDeprecation(payable(msg.sender));
-    if (isDeprecated) return 0;
-
-    // Adjust reward in case it surpases the plan balance.
-    if (msg.sender.balance < amount) {
-      amount = msg.sender.balance;
-    }
-
     clientRegistry[clientId].rewards += amount;
     planRegistry[msg.sender].totalRewarded += amount;
-    return amount;
   }
 
   /* 
-    Views 
+    Getters
   */
   function getContractBalance() external view returns (uint256) {
     return address(this).balance;
@@ -136,7 +87,7 @@ contract RewardCenter {
     return entityRelatedPlans[msg.sender];
   }
 
-  function isPlanActive(address target) external view returns (bool) {
-    return planRegistry[target].active;
+  function getClientAddress(uint256 clientId) external view returns (address) {
+    return clientRegistry[clientId].addr;
   }
 }
