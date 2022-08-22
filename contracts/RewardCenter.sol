@@ -60,10 +60,13 @@ contract RewardCenter {
     }
   }
 
-  function signUpClient(uint256 clientId, address addr) external onlyPlans {
-    require(!clientRegistry[clientId].active, "Id is already taken");
-
-    clientRegistry[clientId] = ClientProfile(true, addr, 0);
+  function signUpClient(uint256 clientId, address clientAddress)
+    external
+    onlyPlans
+  {
+    if (!clientRegistry[clientId].active) {
+      clientRegistry[clientId] = ClientProfile(true, clientAddress, 0);
+    }
   }
 
   function notifyRewardGranted(uint256 clientId, uint256 amount)

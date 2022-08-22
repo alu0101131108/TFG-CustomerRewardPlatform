@@ -33,7 +33,7 @@ contract RewardPlan {
   RewardPointRule[] public rewardPointsRules; /* Sorted low to high points*/
 
   /* Client registries */
-  mapping(uint256 => ClientPoints) public rewardPointsRegistry; /* Client Id -> Client Spends */
+  mapping(uint256 => ClientPoints) public rewardPointsRegistry; /* Client Id -> Client Points */
 
   event FounderAdded(address founderAddress, uint256 collaborationAmount);
   event SpendRuleAdded(address founderAddress, uint256 points, uint256 reward);
@@ -41,7 +41,8 @@ contract RewardPlan {
   event SigningStageBegun(address caller);
   event FounderSigned(address signer, bool allSigned);
   event ClientSignedUp(uint256 clientId, address clientAddress);
-  event AmountSpent(uint256 clientId, uint256 amount, uint256 grantedReward);
+  event PointsScored(uint256 clientId, uint256 amount, uint256 grantedReward);
+  event PlanAwaken(address caller, uint256 collaboration);
 
   modifier onlyRewardCenter() {
     require(
@@ -62,6 +63,11 @@ contract RewardPlan {
       }
       require(allowed, "Only founders authorized");
     }
+    _;
+  }
+
+  modifier onlyCreator() {
+    require(msg.sender == creator, "Only creator authorized");
     _;
   }
 
@@ -182,6 +188,13 @@ contract RewardPlan {
       );
   }
 
+  function resetPlan() private atStage(Stages.ACTIVE) {
+    stage = Stages.CONSTRUCTION;
+    allowRefundTimestamp = block.timestamp + nonRefundableDuration;
+    delete founders;
+    delete rewardPointsRules;
+  }
+
   /*  
     EXTERNALS
   */
@@ -259,7 +272,7 @@ contract RewardPlan {
   }
 
   function sign() external payable atStage(Stages.SIGNING) onlyFounders {
-    for (uint8 i = 1; i < founders.length; i++) {
+    for (uint8 i = 0; i < founders.length; i++) {
       if (msg.sender == founders[i].addr) {
         require(!founders[i].signed, "Founder already signed");
         require(
@@ -293,11 +306,7 @@ contract RewardPlan {
       }
     }
 
-    // Reset the plan.
-    stage = Stages.CONSTRUCTION;
-    allowRefundTimestamp = block.timestamp + nonRefundableDuration;
-    delete founders;
-    delete rewardPointsRules;
+    resetPlan();
   }
 
   /* ON ACTIVE */
@@ -310,7 +319,7 @@ contract RewardPlan {
     emit ClientSignedUp(clientId, addr);
   }
 
-  function notifyPointsAwarded(uint256 clientId, uint256 amount)
+  function notifyPointsScored(uint256 clientId, uint256 amount)
     external
     atStage(Stages.ACTIVE)
     onlyNotifiers
@@ -322,7 +331,7 @@ contract RewardPlan {
     }
     rewardPointsRegistry[clientId].points += amount;
 
-    // Grant reward if there is any.
+    // Reward if there is any valid rule.
     uint256 totalRewarded = checkSpendRules(clientId, 0);
 
     if (totalRewarded > 0) {
@@ -330,9 +339,26 @@ contract RewardPlan {
         payable(rewardCenter.getClientAddress(clientId)).send(totalRewarded), // fix
         "Payment failed"
       );
+      rewardCenter.notifyRewardGranted(clientId, totalRewarded);
     }
 
-    emit AmountSpent(clientId, amount, totalRewarded);
+    emit PointsScored(clientId, amount, totalRewarded);
+  }
+
+  /* ON SLEEP */
+  function awakePlan(bool reset)
+    external
+    payable
+    atStage(Stages.SLEEPING)
+    onlyCreator
+  {
+    if (reset) {
+      resetPlan();
+    } else {
+      require(msg.value > 0, "Awake need funds");
+      stage = Stages.ACTIVE;
+    }
+    emit PlanAwaken(msg.sender, msg.value);
   }
 
   /* 
