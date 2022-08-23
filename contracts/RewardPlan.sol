@@ -6,7 +6,7 @@ import "./Constants.sol";
 import "./DataStructures.sol";
 import "./RewardCenter.sol";
 
-// import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 enum Stages {
   CONSTRUCTION,
