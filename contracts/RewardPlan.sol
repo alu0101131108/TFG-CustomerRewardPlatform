@@ -169,23 +169,30 @@ contract RewardPlan {
       address(this).balance <
       rewardPointsRules[rewardIndex].reward + amountAccumulator
     ) {
-      uint256 fixedRuleSpends = (address(this).balance *
+      uint256 fixedReward = address(this).balance - amountAccumulator;
+      uint256 fixedRulePoints = (fixedReward *
         rewardPointsRules[rewardIndex].points) /
         rewardPointsRules[rewardIndex].reward;
-      rewardPointsRegistry[clientId].points -= fixedRuleSpends;
+
       stage = Stages.SLEEPING;
-      return address(this).balance;
+      rewardPointsRegistry[clientId].points -= fixedRulePoints;
+      return fixedReward;
     }
 
-    // Else consider the full reward and other possible ones.
+    // Else consider the full reward.
     rewardPointsRegistry[clientId].points -= rewardPointsRules[rewardIndex]
       .points;
-    return
-      rewardPointsRules[rewardIndex].reward +
-      checkSpendRules(
-        clientId,
-        rewardPointsRules[rewardIndex].reward + amountAccumulator
-      );
+
+    uint256 totalReward = rewardPointsRules[rewardIndex].reward +
+      amountAccumulator;
+
+    // If the plans balance is greater than the total reward, consider additional rewards.
+    if (address(this).balance > totalReward)
+      return
+        rewardPointsRules[rewardIndex].reward +
+        checkSpendRules(clientId, totalReward);
+    // Else the total rewards = plans balance, therefore dont consider additoinal rewards.
+    else return totalReward;
   }
 
   function resetPlan() private atStage(Stages.ACTIVE) {

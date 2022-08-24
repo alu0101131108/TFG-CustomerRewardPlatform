@@ -4,6 +4,7 @@ const { time, loadFixture } = require('@nomicfoundation/hardhat-network-helpers'
 const { getEventArguments, Stages } = require('../scripts/common');
 
 
+
 const env = {
   CenterAdmin: undefined,
   Entity: {
@@ -52,7 +53,6 @@ describe('Tests for Reward Platform', function () {
   describe('Expected flow of usage', function () {
 
     describe('The Reward Center is deployed', function () {
-
       it('Should deploy correctly', async function () {
         const RewardCenter = await ethers.getContractFactory('RewardCenter');
         env.rewardCenter = await RewardCenter.connect(env.CenterAdmin).deploy();
@@ -74,7 +74,6 @@ describe('Tests for Reward Platform', function () {
         expect(Array.isArray(selfRelatedPlans)).to.equal(true);
         expect(selfRelatedPlans.length).to.equal(0);
       });
-
     });
 
     // Construction
@@ -330,6 +329,42 @@ describe('Tests for Reward Platform', function () {
     });
 
     // Active
+    const testScoredPoints = async (client, notifier, scoredPoints) => {
+      // Balances pre reward.
+      const clientBalancePreRewarding = await ethers.provider.getBalance(client.address);
+      const planBalancePreRewarding = await ethers.provider.getBalance(env.rewardPlan.address);
+      const notifierBalancePreRewarding = await ethers.provider.getBalance(notifier.address);
+
+      // Reward transaction.
+      env.rewardPlan = env.rewardPlan.connect(notifier);
+      const notifyPointsScoredTx = await env.rewardPlan.notifyPointsScored(client.id, scoredPoints);
+      const [clientId, _, totalRewarded] = await getEventArguments(notifyPointsScoredTx, 'PointsScored');
+
+      // Balances post reward.
+      const clientBalancePostRewarding = await ethers.provider.getBalance(client.address);
+      const planBalancePostRewarding = await ethers.provider.getBalance(env.rewardPlan.address);
+      const notifierBalancePostRewarding = await ethers.provider.getBalance(notifier.address);
+
+      // Gas calculation.
+      const notifyPointsScoredTxReceipt = await ethers.provider.getTransactionReceipt(notifyPointsScoredTx.hash);
+      const effectiveGasPrice = notifyPointsScoredTxReceipt.effectiveGasPrice;
+      const txGasUsed = notifyPointsScoredTxReceipt.gasUsed;
+      const txGasUsedWei = effectiveGasPrice * txGasUsed;
+
+      expect(notifierBalancePostRewarding.toString()).to.equal(notifierBalancePreRewarding.sub(txGasUsedWei).toString());
+
+      return {
+        txArguments: { clientId, scoredPoints, totalRewarded },
+        clientBalancePreRewarding,
+        clientBalancePostRewarding,
+        planBalancePreRewarding,
+        planBalancePostRewarding,
+        notifierBalancePreRewarding,
+        notifierBalancePostRewarding,
+        txGasUsedWei
+      };
+    }
+
     describe('Founder B sign the plan, making it transit to the ACTIVE stage', function () {
       it('Should emit an event when Entity B signs the plan', async function () {
         env.rewardPlan = await env.rewardPlan.connect(env.Entity.B);
@@ -486,7 +521,6 @@ describe('Tests for Reward Platform', function () {
     describe('The plan runs out of rewarding balance', function () {
       it('Should reward as much as the plans total rewards allowes', async function () {
         const {
-          txArguments,
           clientBalancePreRewarding,
           clientBalancePostRewarding,
           planBalancePreRewarding,
@@ -512,43 +546,51 @@ describe('Tests for Reward Platform', function () {
 
     // Re Active
     describe('Entity A decides to awake the plan', function () {
+      it('Should emit an event when the plan is awaken', async function () {
+        env.rewardPlan = env.rewardPlan.connect(env.Entity.A);
+        const awakeTx = await env.rewardPlan.awakePlan(false, { value: '90000000000000' });
+        const [caller, collaboration] = await getEventArguments(awakeTx, 'PlanAwaken');
 
+        expect(caller).to.equal(env.Entity.A.address);
+        expect(collaboration.toString()).to.equal('90000000000000');
+      });
+
+      it('Should make the plan transit to an active stage', async function () {
+        const stage = await env.rewardPlan.stage();
+
+        expect(stage).to.equal(Stages.ACTIVE);
+      });
+
+      it('Should be able to reward untill it runs out of funds again', async function () {
+        const scoredPoints = env.planRules.C.points.mul(3);  // 3000.
+        const clientPointsPreScore = (await env.rewardPlan.rewardPointsRegistry(env.Client.A.id)).points;
+
+        const {
+          clientBalancePreRewarding,
+          clientBalancePostRewarding,
+          planBalancePreRewarding,
+          planBalancePostRewarding
+        } = await testScoredPoints(env.Client.A, env.Notifier.A, scoredPoints);
+
+        expect(clientBalancePostRewarding.toString()).to.equal(clientBalancePreRewarding.add(planBalancePreRewarding).toString());
+        expect(planBalancePostRewarding.toString()).to.equal('0');
+
+        // Check that the client ends with less points according to the received reward (2 complete and 1 fixed).
+        const clientPointsPreRewarding = clientPointsPreScore.add(scoredPoints);
+        const clientPointsPostRewarding = (await env.rewardPlan.rewardPointsRegistry(env.Client.A.id)).points;
+        const lastFixedReward = planBalancePreRewarding.mod(env.planRules.C.reward); // 2000000000000000.
+        const lastFixedPoints = lastFixedReward.mul(env.planRules.C.points).div(env.planRules.C.reward); // 571
+        const totalPointsConsumed = env.planRules.C.points.mul(2).add(lastFixedPoints); // 2571
+
+        expect(clientPointsPostRewarding.toString()).to.equal(clientPointsPreRewarding.sub(totalPointsConsumed).toString());
+      });
+
+      it('Should make the plan transit to the sleeping stage again', async function () {
+        const stage = await env.rewardPlan.stage();
+
+        expect(stage).to.equal(Stages.SLEEPING);
+      });
     });
   });
 });
 
-async function testScoredPoints(client, notifier, scoredPoints) {
-  // Balances pre reward.
-  const clientBalancePreRewarding = await ethers.provider.getBalance(client.address);
-  const planBalancePreRewarding = await ethers.provider.getBalance(env.rewardPlan.address);
-  const notifierBalancePreRewarding = await ethers.provider.getBalance(notifier.address);
-
-  // Reward transaction.
-  env.rewardPlan = env.rewardPlan.connect(notifier);
-  const notifyPointsScoredTx = await env.rewardPlan.notifyPointsScored(client.id, scoredPoints);
-  const [clientId, _, totalRewarded] = await getEventArguments(notifyPointsScoredTx, 'PointsScored');
-
-  // Balances post reward.
-  const clientBalancePostRewarding = await ethers.provider.getBalance(client.address);
-  const planBalancePostRewarding = await ethers.provider.getBalance(env.rewardPlan.address);
-  const notifierBalancePostRewarding = await ethers.provider.getBalance(notifier.address);
-
-  // Gas calculation.
-  const notifyPointsScoredTxReceipt = await ethers.provider.getTransactionReceipt(notifyPointsScoredTx.hash);
-  const effectiveGasPrice = notifyPointsScoredTxReceipt.effectiveGasPrice;
-  const txGasUsed = notifyPointsScoredTxReceipt.gasUsed;
-  const txGasUsedWei = effectiveGasPrice * txGasUsed;
-
-  expect(notifierBalancePostRewarding.toString()).to.equal(notifierBalancePreRewarding.sub(txGasUsedWei).toString());
-
-  return {
-    txArguments: { clientId, scoredPoints, totalRewarded },
-    clientBalancePreRewarding,
-    clientBalancePostRewarding,
-    planBalancePreRewarding,
-    planBalancePostRewarding,
-    notifierBalancePreRewarding,
-    notifierBalancePostRewarding,
-    txGasUsedWei
-  };
-}
