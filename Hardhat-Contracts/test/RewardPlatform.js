@@ -61,19 +61,6 @@ describe('Tests for Reward Platform', function () {
 
         expect(env.rewardCenter).not.to.equal(undefined); // Could use a better expect sentence.
       });
-
-      it('Should be able to call getContractBalance()', async function () {
-        const balance = await env.rewardCenter.getContractBalance();
-
-        expect(balance.toString()).to.equal("0");
-      });
-
-      it('Should be able to call getSelfRelatedPlans()', async function () {
-        const selfRelatedPlans = await env.rewardCenter.getSelfRelatedPlans();
-
-        expect(Array.isArray(selfRelatedPlans)).to.equal(true);
-        expect(selfRelatedPlans.length).to.equal(0);
-      });
     });
 
     // Construction
@@ -82,13 +69,13 @@ describe('Tests for Reward Platform', function () {
       it('Should deploy correctly', async function () {
         // Could include chain verification with api
         env.rewardCenter = await env.rewardCenter.connect(env.Entity.A);
-        const createPlanTx = await env.rewardCenter.createRewardPlan(env.nonRefundableDuration);
+        const createPlanTx = await env.rewardCenter.createRewardPlan(env.nonRefundableDuration, "Canary Islands Asociates");
         const [newPlanAddress] = await getEventArguments(createPlanTx, 'RewardPlanCreated');
         env.rewardPlan = await ethers.getContractAt("RewardPlan", newPlanAddress);
         env.rewardPlan = await env.rewardPlan.connect(env.Entity.A);
 
-        // const createPlanTxBlock = await ethers.getDefaultProvider().getBlock(createPlanTx.blockNumber); 
-        env.planDeployTimestamp = await time.latest(); // createPlanTxBlock.timestamp;
+        const createPlanTxBlock = await ethers.provider.getBlock(createPlanTx.blockNumber);
+        env.planDeployTimestamp = createPlanTxBlock.timestamp;
 
         expect(env.rewardPlan).not.to.equal(undefined);
       });
@@ -106,7 +93,7 @@ describe('Tests for Reward Platform', function () {
       });
 
       it('Should have zero wei as initial balance', async function () {
-        const initialBalance = await env.rewardPlan.getContractBalance();
+        const initialBalance = await ethers.provider.getBalance(env.rewardPlan.address);
 
         expect(initialBalance.toString()).to.equal('0');
       });
@@ -225,8 +212,8 @@ describe('Tests for Reward Platform', function () {
     describe('Entities A and B add some points rules', function () {
       it('Should emit an event when Entity A adds a points rule', async function () {
         env.rewardPlan = await env.rewardPlan.connect(env.Entity.A);
-        const addSpendRuleTx = await env.rewardPlan.addSpendRule(env.planRules.A.points, env.planRules.A.reward);
-        const [founder, points, reward] = await getEventArguments(addSpendRuleTx, 'SpendRuleAdded');
+        const addRewardRuleTx = await env.rewardPlan.addRewardRule(env.planRules.A.points, env.planRules.A.reward);
+        const [founder, points, reward] = await getEventArguments(addRewardRuleTx, 'RewardRuleAdded');
 
         expect(founder).to.equal(env.Entity.A.address);
         expect(points.toString()).to.equal(env.planRules.A.points.toString());
@@ -235,8 +222,8 @@ describe('Tests for Reward Platform', function () {
 
       it('Should emit an event when Entity B adds a points rule', async function () {
         env.rewardPlan = await env.rewardPlan.connect(env.Entity.B);
-        const addSpendRuleTx = await env.rewardPlan.addSpendRule(env.planRules.B.points, env.planRules.B.reward);
-        const [founder, points, reward] = await getEventArguments(addSpendRuleTx, 'SpendRuleAdded');
+        const addRewardRuleTx = await env.rewardPlan.addRewardRule(env.planRules.B.points, env.planRules.B.reward);
+        const [founder, points, reward] = await getEventArguments(addRewardRuleTx, 'RewardRuleAdded');
 
         expect(founder).to.equal(env.Entity.B.address);
         expect(points.toString()).to.equal(env.planRules.B.points.toString());
@@ -244,16 +231,27 @@ describe('Tests for Reward Platform', function () {
       });
 
       it('Should mantain points rules array sorted from low to high points', async function () {
-        const addSpendRuleCTx = await env.rewardPlan.addSpendRule(env.planRules.C.points, env.planRules.C.reward);
-        const addSpendRuleDTx = await env.rewardPlan.addSpendRule(env.planRules.D.points, env.planRules.D.reward);
+        const addRewardRuleCTx = await env.rewardPlan.addRewardRule(env.planRules.C.points, env.planRules.C.reward);
+        const addRewardRuleDTx = await env.rewardPlan.addRewardRule(env.planRules.D.points, env.planRules.D.reward);
 
-        const CSpendRule = await env.rewardPlan.rewardPointsRules(1);
-        const DSpendRule = await env.rewardPlan.rewardPointsRules(3);
+        const CPointsRule = await env.rewardPlan.rewardPointsRules(1);
+        const DPointsRule = await env.rewardPlan.rewardPointsRules(3);
 
-        expect(CSpendRule.points.toString()).to.equal(env.planRules.C.points.toString());
-        expect(CSpendRule.reward.toString()).to.equal(env.planRules.C.reward.toString());
-        expect(DSpendRule.points.toString()).to.equal(env.planRules.D.points.toString());
-        expect(DSpendRule.reward.toString()).to.equal(env.planRules.D.reward.toString());
+        expect(CPointsRule.points.toString()).to.equal(env.planRules.C.points.toString());
+        expect(CPointsRule.reward.toString()).to.equal(env.planRules.C.reward.toString());
+        expect(DPointsRule.points.toString()).to.equal(env.planRules.D.points.toString());
+        expect(DPointsRule.reward.toString()).to.equal(env.planRules.D.reward.toString());
+      });
+
+      it('Should be able to remove a rule', async function () {
+        const addRewardRuleDTx = await env.rewardPlan.addRewardRule(env.planRules.D.points, env.planRules.D.reward);
+        const DPointsRule = await env.rewardPlan.rewardPointsRules(4);
+
+        expect(DPointsRule.points).to.equal(env.planRules.D.points);
+        expect(DPointsRule.reward).to.equal(env.planRules.D.reward);
+
+        await env.rewardPlan.removeRewardRule(4)
+        await expect(env.rewardPlan.rewardPointsRules(4)).to.be.revertedWithoutReason();
       });
 
     });

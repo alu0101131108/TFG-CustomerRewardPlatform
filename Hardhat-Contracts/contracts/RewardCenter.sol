@@ -9,10 +9,13 @@ import "./RewardPlan.sol";
 // import "hardhat/console.sol";
 
 contract RewardCenter {
+  mapping(address => uint256) public clientAddressToId; // Client address => to Numeric Id.
   mapping(uint256 => ClientProfile) public clientRegistry; // Numeric Id => Client Profile.
   mapping(address => EntityProfile) public entityRegistry; // Address => Entity Profile.
   mapping(address => PlanProfile) public planRegistry; // Address => Reward Plan Profile.
-  mapping(address => address[]) public entityRelatedPlans; // Address => Plan adress array.
+
+  mapping(address => address[]) public entityRelatedPlans; // Address => Plan address array.
+  mapping(address => address[]) public clientRelatedPlans; // Address => Plan address array.
 
   event RewardPlanCreated(address planAddress, address creator);
 
@@ -25,7 +28,10 @@ contract RewardCenter {
 
   // receive() external payable {}
 
-  function createRewardPlan(uint256 refundNotAllowedDuration) external {
+  function createRewardPlan(
+    uint256 refundNotAllowedDuration,
+    string calldata name
+  ) external {
     signUpEntity(msg.sender);
     require(
       entityRegistry[msg.sender].runningPlans < 255,
@@ -36,24 +42,24 @@ contract RewardCenter {
     RewardPlan plan = new RewardPlan(msg.sender, refundNotAllowedDuration);
 
     entityRelatedPlans[msg.sender].push(address(plan));
-    planRegistry[address(plan)] = PlanProfile(true, msg.sender, 0);
+    planRegistry[address(plan)] = PlanProfile(true, msg.sender, 0, name);
 
     emit RewardPlanCreated(address(plan), msg.sender);
   }
 
-  function notifyFounderAddedToPlan(address founderAddress) external onlyPlans {
-    signUpEntity(founderAddress);
+  function notifyMemberAddedToPlan(address memberAddress) external onlyPlans {
+    signUpEntity(memberAddress);
     require(
-      entityRegistry[founderAddress].runningPlans < 255,
-      "Founder added reached de plans limit"
+      entityRegistry[memberAddress].runningPlans < 255,
+      "Running plans limit reached"
     );
-    if (planRegistry[msg.sender].creatorAddr != founderAddress) {
-      entityRegistry[founderAddress].runningPlans++;
-      entityRelatedPlans[founderAddress].push(msg.sender);
+    if (planRegistry[msg.sender].creatorAddr != memberAddress) {
+      entityRegistry[memberAddress].runningPlans++;
+      entityRelatedPlans[memberAddress].push(msg.sender);
     }
   }
 
-  // Will be called only by creating a plan or being added to one.
+  // Will be called only by creating a plan or being added as member to one.
   function signUpEntity(address founderAddress) private {
     if (!entityRegistry[founderAddress].active) {
       entityRegistry[founderAddress] = EntityProfile(true, founderAddress, 0);
@@ -66,6 +72,8 @@ contract RewardCenter {
   {
     if (!clientRegistry[clientId].active) {
       clientRegistry[clientId] = ClientProfile(true, clientAddress, 0);
+      clientAddressToId[clientAddress] = clientId;
+      clientRelatedPlans[clientAddress].push(msg.sender);
     }
   }
 
@@ -79,12 +87,24 @@ contract RewardCenter {
     planRegistry[msg.sender].totalRewarded += amount;
   }
 
+  function unlinkPlanToMember(address member) external onlyPlans {
+    entityRegistry[member].runningPlans--;
+    uint256 relatedPlansLength = entityRelatedPlans[member].length;
+
+    for (uint256 i = 0; i < relatedPlansLength; i++) {
+      if (entityRelatedPlans[member][i] == msg.sender) {
+        entityRelatedPlans[member][i] = entityRelatedPlans[member][
+          relatedPlansLength - 1
+        ];
+        entityRelatedPlans[member].pop();
+        break;
+      }
+    }
+  }
+
   /* 
     Getters
   */
-  function getContractBalance() external view returns (uint256) {
-    return address(this).balance;
-  }
 
   function getSelfRelatedPlans() external view returns (address[] memory) {
     return entityRelatedPlans[msg.sender];

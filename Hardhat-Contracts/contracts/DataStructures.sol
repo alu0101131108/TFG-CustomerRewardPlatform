@@ -11,13 +11,14 @@ struct ClientProfile {
 struct EntityProfile {
   bool active;
   address addr;
-  uint8 runningPlans; // Usefull to know when to unlist them as entities. (256 max)
+  uint8 runningPlans; // 256 max
 }
 
 struct PlanProfile {
   bool active;
   address creatorAddr;
   uint256 totalRewarded;
+  string name;
 }
 
 struct Founder {
@@ -39,4 +40,5 @@ struct ClientPoints {
 struct RewardPointRule {
   uint256 points;
   uint256 reward;
+  address creator;
 }
