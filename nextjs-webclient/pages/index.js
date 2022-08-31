@@ -3,6 +3,7 @@
 // import styles from '../styles/Home.module.css';
 import { useWeb3React } from '@web3-react/core';
 import { InjectedConnector } from '@web3-react/injected-connector';
+import { useState, useEffect } from 'react';
 
 import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
@@ -11,59 +12,19 @@ import Tab from 'react-bootstrap/Tab';
 import Tabs from 'react-bootstrap/Tabs';
 import ListGroup from 'react-bootstrap/ListGroup';
 
+import {
+  getRelatedContractAddresses,
+  getContractName,
+  getContractAddress,
+  getContractStage,
+  getContractBalance,
+  getContractTotalRewarded,
+  getContractRules,
+  getClientTotalRewards,
+  getClientScoredPoints
+} from '../src/contract-interaction.js';
+
 const injected = new InjectedConnector();
-
-// Data fetching functions.
-async function getRelatedContractAddresses() {
-
-  const addresses = ["0x001", "0x002", "0x003"];
-  return addresses;
-}
-function getContractName() {
-  const contract_name = "Canary Islands Associates";
-  return contract_name;
-}
-function getContractAddress() {
-  const contract_address = "0x000000000000000000000000000000000000000";
-  return contract_address;
-}
-function getContractStage() {
-  const contract_stage = 0;
-  return contract_stage;
-}
-function getContractBalance() {
-  const contract_balance = "1000000000000000000";
-  return contract_balance;
-}
-function getContractTotalRewarded() {
-  const contract_totalRewarded = '258123';
-  return contract_totalRewarded;
-}
-function getContractRules() {
-  const contract_rules = [
-    {
-      points: '1000',
-      reward: '10000'
-    },
-    {
-      points: '2000',
-      reward: '20000'
-    },
-    {
-      points: '3000',
-      reward: '30000'
-    }
-  ];
-  return contract_rules;
-}
-function getClientTotalRewards() {
-  const totalRewards = '15000';
-  return totalRewards;
-}
-function getClientScoredPoints() {
-  const scoredPoints = '200';
-  return scoredPoints;
-}
 
 
 // Components.
@@ -72,7 +33,11 @@ export function ContractRules() {
   return (
     <ListGroup>
       {contract_rules.map((rule, index) => {
-        return (<ListGroup.Item key={index}>#{index + 1} Score {rule.points} points to earn {rule.reward} WEI</ListGroup.Item>);
+        return (
+          <ListGroup.Item key={index}>
+            #{index + 1} Score {rule.points} points to earn {rule.reward} WEI
+          </ListGroup.Item>
+        );
       })}
     </ListGroup>
   );
@@ -148,10 +113,22 @@ export function ContractHeader() {
   );
 }
 
-export function ContractCard() {
+export function ContractCard({ target, index }) {
+  const { active, library: provider } = useWeb3React();
+
+  const [contractName, setContractName] = useState("Loading...");
+  useEffect(() => {
+    getContractName(provider, target)
+      .then(name => {
+        setContractName(name);
+      });
+  }, [])
+
+
   return (
-    <div>
-      <Accordion.Header>{getContractName()}</Accordion.Header>
+    <Accordion.Item eventKey={index.toString()}>
+
+      <Accordion.Header>{contractName}</Accordion.Header>
       <Accordion.Body>
         <Card>
           <Card.Header>
@@ -178,18 +155,29 @@ export function ContractCard() {
           </Card.Body>
         </Card>
       </Accordion.Body>
-    </div>
+
+    </Accordion.Item>
   );
 }
 
 export function ContractAccordion() {
+  const { active, library: provider } = useWeb3React();
+
+  const [relatedAddresses, setRelatedAddresses] = useState([]);
+  useEffect(() => {
+    getRelatedContractAddresses(provider)
+      .then(addresses => {
+        setRelatedAddresses(addresses);
+      });
+  }, [])
+
   return (
     <Accordion defaultActiveKey="0">
-
-      <Accordion.Item eventKey="0">
-        <ContractCard />
-      </Accordion.Item>
-
+      {relatedAddresses.map((address, index) => {
+        return (
+          <ContractCard key={index} target={address} index={index} />
+        );
+      })}
     </Accordion>
   );
 }
@@ -197,7 +185,7 @@ export function ContractAccordion() {
 // Main component.
 function Home() {
 
-  const { activate, active, library: provider } = useWeb3React();
+  const { activate, active } = useWeb3React();
 
   async function connect() {
     try {
@@ -213,13 +201,13 @@ function Home() {
 
       <div className="row">
         <div className="mt-4 mb-4 col-md-12 text-center">
-          {active ? " Connected!" : <button onClick={() => connect()}>Connect</button>}
+          {active ? <div></div> : <button onClick={() => connect()}>Connect</button>}
         </div>
       </div>
 
       <div className="row">
         <div className="col-md-12">
-          <ContractAccordion />
+          {active ? <ContractAccordion /> : <div></div>}
         </div >
       </div>
     </div>
