@@ -24,9 +24,11 @@ contract RewardCenter {
     _;
   }
 
-  constructor() {}
+  receive() external payable {}
 
-  // receive() external payable {}
+  fallback() external payable {}
+
+  constructor() {}
 
   function createRewardPlan(
     uint256 refundNotAllowedDuration,
@@ -106,11 +108,48 @@ contract RewardCenter {
     Getters
   */
 
+  function checkRolesInPlan(address planAddress)
+    external
+    view
+    returns (
+      bool isClient,
+      bool isFounder,
+      bool isNotifier
+    )
+  {
+    require(planRegistry[planAddress].active, "Plan not registered");
+
+    RewardPlan target = RewardPlan(payable(planAddress));
+
+    return (
+      target.isClient(clientAddressToId[msg.sender]),
+      target.isFounder(msg.sender),
+      target.isNotifier(msg.sender)
+    );
+  }
+
   function getSelfRelatedPlans() external view returns (address[] memory) {
-    return entityRelatedPlans[msg.sender];
+    uint256 nEntityPlans = entityRelatedPlans[msg.sender].length;
+    uint256 nClientPlans = clientRelatedPlans[msg.sender].length;
+    address[] memory relatedPlans = new address[](nEntityPlans + nClientPlans);
+
+    for (uint256 i = 0; i < nEntityPlans; i++) {
+      relatedPlans[i] = entityRelatedPlans[msg.sender][i];
+    }
+
+    for (uint256 i = 0; i < nClientPlans; i++) {
+      relatedPlans[nEntityPlans + i] = clientRelatedPlans[msg.sender][i];
+    }
+
+    return relatedPlans;
   }
 
   function getClientAddress(uint256 clientId) external view returns (address) {
     return clientRegistry[clientId].addr;
+  }
+
+  function getPlanStage(address planAddress) external view returns (Stages) {
+    require(planRegistry[planAddress].active, "Plan not registered");
+    return RewardPlan(payable(planAddress)).stage();
   }
 }

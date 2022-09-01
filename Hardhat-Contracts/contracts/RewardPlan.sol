@@ -112,7 +112,7 @@ contract RewardPlan {
     nonRefundableDuration = nonRefundableDuration_;
     allowRefundTimestamp = block.timestamp + nonRefundableDuration_;
     stage = Stages.CONSTRUCTION;
-    rewardCenter = RewardCenter(msg.sender);
+    rewardCenter = RewardCenter(payable(msg.sender));
   }
 
   receive() external payable {}
@@ -360,6 +360,12 @@ contract RewardPlan {
     onlyNotifiers
   {
     rewardCenter.signUpClient(clientId, addr);
+
+    if (!rewardPointsRegistry[clientId].active) {
+      rewardPointsRegistry[clientId].active = true;
+      rewardPointsRegistry[clientId].points = 0;
+    }
+
     emit ClientSignedUp(clientId, addr);
   }
 
@@ -368,11 +374,6 @@ contract RewardPlan {
     atStage(Stages.ACTIVE)
     onlyNotifiers
   {
-    // Register client if needed and add the amount.
-    if (!rewardPointsRegistry[clientId].active) {
-      rewardPointsRegistry[clientId].active = true;
-      rewardPointsRegistry[clientId].points = 0;
-    }
     rewardPointsRegistry[clientId].points += amount;
 
     // Reward if there is any valid rule.
@@ -416,5 +417,24 @@ contract RewardPlan {
       addresses[i] = founders[i].addr;
     }
     return addresses;
+  }
+
+  function isClient(uint256 targetId) external view returns (bool) {
+    return rewardPointsRegistry[targetId].active;
+  }
+
+  function isNotifier(address targetAddr) external view returns (bool) {
+    return notifiers[targetAddr].active;
+  }
+
+  function isFounder(address targetAddr) external view returns (bool) {
+    bool result = false;
+    for (uint8 i = 0; i < founders.length; i++) {
+      if (founders[i].addr == targetAddr) {
+        result = true;
+        break;
+      }
+    }
+    return result;
   }
 }
