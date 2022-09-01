@@ -11,20 +11,25 @@ import Accordion from 'react-bootstrap/Accordion';
 import Tab from 'react-bootstrap/Tab';
 import Tabs from 'react-bootstrap/Tabs';
 import ListGroup from 'react-bootstrap/ListGroup';
+import Form from 'react-bootstrap/Form';
+import Nav from 'react-bootstrap/Nav';
+import Spinner from 'react-bootstrap/Spinner';
+import Alert from 'react-bootstrap/Alert';
 
 import {
-  getRelatedContractAddresses,
-  getContractName,
-  getContractAddress,
-  getContractStage,
-  getContractBalance,
-  getContractTotalRewarded,
+  getRewardCenterData,
+  getRelatedPlansBasics,
+  getPlanHeaderData,
+  getRolesInPlan,
   getContractRules,
-  getClientTotalRewards,
   getClientScoredPoints
-} from '../src/contract-interaction.js';
+} from '../src/contract-view.js';
 
-const injected = new InjectedConnector();
+import {
+  createRewardPlan
+} from '../src/contract-execute.js';
+
+import { ethers } from 'ethers';
 
 
 // Components.
@@ -43,11 +48,10 @@ export function ContractRules() {
   );
 }
 
-export function ClientInterface() {
+export function ClientInterface({ target }) {
   return (
     <div className="row">
       <div className="col-md-12 mt-2">
-        <Card.Text><b>Total Rewards:</b> {" " + getClientTotalRewards()}</Card.Text>
         <Card.Text><b>Points Scored:</b> {" " + getClientScoredPoints()}</Card.Text>
         <Card.Text><b>Rules:</b></Card.Text><ContractRules />
       </div>
@@ -55,7 +59,7 @@ export function ClientInterface() {
   );
 }
 
-export function FounderInterface() {
+export function FounderInterface({ target }) {
   return (
     <div className="row">
       <div className="col-md-12">
@@ -65,7 +69,7 @@ export function FounderInterface() {
   );
 }
 
-export function NotifierInterface() {
+export function NotifierInterface({ target }) {
   return (
     <div className="row">
       <div className="col-md-12">
@@ -75,79 +79,147 @@ export function NotifierInterface() {
   );
 }
 
-export function ContractHeader() {
-  let variant, text;
-  switch (getContractStage()) {
-    case 0:
-      variant = "info";
-      text = "Construction";
-      break;
-    case 1:
-      variant = "warning";
-      text = "Signing";
-      break;
-    case 2:
-      variant = "success";
-      text = "Active";
-      break;
-    case 3:
-      variant = "secondary";
-      text = "Sleeping";
-      break;
+export function RewardCenterInterface() {
+
+  const { active, library: provider } = useWeb3React();
+  const [error, setError] = useState({ isError: false, message: "" });
+  const [success, setSuccess] = useState({ isSuccess: false, message: "" });
+
+  async function executeCreateRewardPlan() {
+    try {
+      const name = document.getElementById("create-reward-plan-name").value;
+      const nonRefundableDays = document.getElementById("create-reward-plan-refundable").value;
+      const nonRefundableSeconds = ethers.BigNumber.from(nonRefundableDays).mul(24).mul(60).mul(60);
+      await createRewardPlan(provider, name, nonRefundableSeconds);
+      setSuccess({ isSuccess: true, message: "Reward plan created successfully." });
+      setTimeout(() => { setSuccess({ isSuccess: false }) }, 3000);
+    } catch (e) {
+      setError({ isError: true, message: e.message });
+      console.log(e);
+    }
   }
+
+  return (
+    <Tab.Container id="left-tabs-example" defaultActiveKey="first">
+      <div className="row">
+        <div className="col-md-4">
+          <Nav variant="pills" className="flex-column">
+            <Nav.Item>
+              <Nav.Link eventKey="create-reward-plan">Create Reward Plan</Nav.Link>
+            </Nav.Item>
+          </Nav>
+        </div>
+
+        <div className="col-md-8 mb-4">
+          <Tab.Content>
+            <Tab.Pane eventKey="create-reward-plan">
+
+              <Form>
+                <Form.Group className="mb-3" controlId="create-reward-plan-name">
+                  <Form.Control type="text" placeholder="Name" />
+                </Form.Group>
+
+                <Form.Group className="mb-3" controlId="create-reward-plan-refundable">
+                  <Form.Control type="text" placeholder="Non refundable days" />
+                </Form.Group>
+
+                <Button onClick={executeCreateRewardPlan}>Execute</Button>
+              </Form>
+
+            </Tab.Pane>
+          </Tab.Content>
+        </div>
+
+        {error.isError ?
+          <Alert variant="danger" >{error.message}</Alert>
+          : null}
+        {success.isSuccess ?
+          <Alert variant="success" >{success.message}</Alert>
+          : null}
+      </div>
+    </Tab.Container>
+  );
+}
+
+export function ContractHeader({ target }) {
+  const { active, library: provider } = useWeb3React();
+
+  const [contractHeaderData, setContractHeaderData] = useState({});
+  useEffect(() => {
+    getPlanHeaderData(provider, target)
+      .then(headerData => {
+        switch (headerData.stage) {
+          case 0:
+            headerData.stageButtonVariant = "info";
+            headerData.stageButtonText = "Construction";
+            break;
+          case 1:
+            headerData.stageButtonVariant = "warning";
+            headerData.stageButtonText = "Signing";
+            break;
+          case 2:
+            headerData.stageButtonVariant = "success";
+            headerData.stageButtonText = "Active";
+            break;
+          case 3:
+            headerData.stageButtonVariant = "secondary";
+            headerData.stageButtonText = "Sleeping";
+            break;
+        }
+        setContractHeaderData(headerData);
+      });
+  }, [])
 
   return (
     <div className="row">
 
       <div className="col-md-10">
-        <Card.Subtitle className="mt-2 text-muted">{"Address: " + getContractAddress()}</Card.Subtitle>
-        <Card.Subtitle className="mt-1 text-muted">{"Balance: " + getContractBalance()}</Card.Subtitle>
-        <Card.Subtitle className="mt-1 text-muted">{"Rewards: " + getContractTotalRewarded()}</Card.Subtitle>
+        <Card.Subtitle className="mt-2 text-muted">{"Address: " + contractHeaderData.address}</Card.Subtitle>
+        <Card.Subtitle className="mt-1 text-muted">{"Balance: " + contractHeaderData.balance}</Card.Subtitle>
+        <Card.Subtitle className="mt-1 text-muted">{"Rewards: " + contractHeaderData.totalRewarded}</Card.Subtitle>
       </div>
 
       <div className="col-md-2 mt-3">
-        <Button variant={variant} disabled>{text}</Button>
+        <Button variant={contractHeaderData.stageButtonVariant} disabled>{contractHeaderData.stageButtonText}</Button>
       </div>
 
     </div>
   );
 }
 
-export function ContractCard({ target, index }) {
+export function ContractCard({ contract, index }) {
+
   const { active, library: provider } = useWeb3React();
 
-  const [contractName, setContractName] = useState("Loading...");
+  const [rolesInPlan, setRolesInPlan] = useState({});
   useEffect(() => {
-    getContractName(provider, target)
-      .then(name => {
-        setContractName(name);
+    getRolesInPlan(provider, contract.address)
+      .then(roles => {
+        setRolesInPlan(roles);
       });
   }, [])
 
-
   return (
     <Accordion.Item eventKey={index.toString()}>
-
-      <Accordion.Header>{contractName}</Accordion.Header>
+      <Accordion.Header>{contract.name}</Accordion.Header>
       <Accordion.Body>
         <Card>
           <Card.Header>
-            <ContractHeader />
+            <ContractHeader target={contract.address} />
           </Card.Header>
 
           <Card.Body>
+            <Tabs defaultActiveKey="none" id="contract-tabs" className="mb-3" justify>
 
-            <Tabs defaultActiveKey="client-interface" id="contract-tabs" className="mb-3">
-
-              <Tab eventKey="client-interface" title="Client">
+              <Tab eventKey="client-interface" title="Client" disabled={!rolesInPlan.isClient} target={contract.address}>
                 <ClientInterface />
               </Tab>
 
-              <Tab eventKey="founder-interface" title="Founder">
+              <Tab eventKey="founder-interface" title="Founder" disabled={!rolesInPlan.isFounder} target={contract.address}>
                 <FounderInterface />
               </Tab>
 
-              <Tab eventKey="notifier-interface" title="Notifier">
+              <Tab eventKey="notifier-interface" title="Notifier" disabled={!rolesInPlan.isNotifier} target={contract.address}>
                 <NotifierInterface />
               </Tab>
 
@@ -155,7 +227,6 @@ export function ContractCard({ target, index }) {
           </Card.Body>
         </Card>
       </Accordion.Body>
-
     </Accordion.Item>
   );
 }
@@ -163,53 +234,120 @@ export function ContractCard({ target, index }) {
 export function ContractAccordion() {
   const { active, library: provider } = useWeb3React();
 
-  const [relatedAddresses, setRelatedAddresses] = useState([]);
+  const [relatedPlansBasics, setRelatedPlansBasics] = useState([]);
   useEffect(() => {
-    getRelatedContractAddresses(provider)
-      .then(addresses => {
-        setRelatedAddresses(addresses);
-      });
-  }, [])
+    getRelatedPlansBasics(provider)
+      .then(basics => {
+        setRelatedPlansBasics(basics);
+      })
+      .catch(e => console.log("Error with Reward Center"));
+  }, []);
 
   return (
-    <Accordion defaultActiveKey="0">
-      {relatedAddresses.map((address, index) => {
+    <Accordion defaultActiveKey="none" className="shadow-lg">
+      <div className="text-center p-2 text-white bg-dark">
+        <h4>Related Plans</h4>
+      </div>
+      {relatedPlansBasics.map((plan, index) => {
         return (
-          <ContractCard key={index} target={address} index={index} />
+          <ContractCard key={index} contract={plan} index={index} />
         );
       })}
     </Accordion>
   );
 }
 
+export function RewardCenterCard() {
+  const { active, library: provider } = useWeb3React();
+  const [rewardCenterData, setRewardCenterData] = useState({ titles: [], values: [] });
+
+  useEffect(() => {
+    getRewardCenterData(provider)
+      .then(data => {
+        let titles = [];
+        let values = [];
+        const entityTitles = ["Running Plans"];
+        const entityValues = [data.runningPlans];
+        const clientTitles = ["My Client ID", "Rewards Recieved"];
+        const clientValues = [data.clientID, data.totalRewardsRecieved];
+        if (data.isClient) {
+          titles = titles.concat(clientTitles);
+          values = values.concat(clientValues);
+        }
+        if (data.isEntity) {
+          titles = titles.concat(entityTitles);
+          values = values.concat(entityValues);
+        }
+        setRewardCenterData({ titles, values });
+      })
+      .catch(e => console.log("Error with Reward Center"));
+  }, []);
+
+  return (
+    <Card className="shadow-lg" border="light">
+      <div className="text-center p-2 text-white bg-dark">
+        <h4>Reward Center</h4>
+      </div>
+      <Card.Body className="text-center">
+        <hr />
+        <div className="row justify-content-center">
+          {rewardCenterData.titles.map((title, index) => {
+            return <div key={index} className="col-md-4 fw-semibold">{title} </div>;
+          })}
+        </div>
+        <div className="row justify-content-center">
+          {rewardCenterData.values.map((value, index) => {
+            return <div key={index} className="col-md-4">{value}</div>;
+          })}
+        </div>
+        <hr />
+        <RewardCenterInterface />
+      </Card.Body>
+    </Card>
+  );
+}
+
 // Main component.
 function Home() {
+  const { activate, active, library: provider } = useWeb3React();
+  const [criticalError, setCriticalError] = useState(false);
 
-  const { activate, active } = useWeb3React();
-
-  async function connect() {
-    try {
-      await activate(injected);
-    }
-    catch (e) {
-      console.log(e);
-    }
-  };
+  useEffect(() => {
+    activate(new InjectedConnector()).catch(e => {
+      setCriticalError(true);
+    });
+  }, [])
 
   return (
     <div className="container">
 
-      <div className="row">
-        <div className="mt-4 mb-4 col-md-12 text-center">
-          {active ? <div></div> : <button onClick={() => connect()}>Connect</button>}
-        </div>
+      <div className="text-center pt-5">
+        <h1>Reward Platform</h1>
       </div>
+      <hr />
 
-      <div className="row">
-        <div className="col-md-12">
-          {active ? <ContractAccordion /> : <div></div>}
-        </div >
-      </div>
+      {criticalError ?
+        <Alert variant="danger" >
+          Critical Error.
+        </Alert>
+        : null}
+
+      {active ?
+        <div>
+          <div className="row justify-content-center mt-5">
+            <div className="col-md-8">
+              <RewardCenterCard />
+            </div >
+          </div>
+
+          <div className="row justify-content-center mt-5">
+            <div className="col-md-8">
+              <ContractAccordion />
+            </div >
+          </div>
+        </div>
+        : null}
+
     </div>
   );
 }
