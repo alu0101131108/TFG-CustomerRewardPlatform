@@ -307,9 +307,11 @@ contract RewardPlan {
       "Not creator of the rule"
     );
 
-    rewardPointsRules[ruleIndex] = rewardPointsRules[
-      rewardPointsRules.length - 1
-    ];
+    // Move each rule one position behind, starting at the index and pop the last one.
+    for (uint256 i = ruleIndex; i < rewardPointsRules.length - 1; i++) {
+      rewardPointsRules[i] = rewardPointsRules[i + 1];
+    }
+
     rewardPointsRules.pop();
 
     emit RewardRuleRemoved(msg.sender, ruleIndex);
