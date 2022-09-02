@@ -6,9 +6,9 @@ const RewardCenterAddress = '0x5fbdb2315678afecb367f032d93f642f64180aa3';
 
 // Reward Center.
 async function createRewardPlan(provider) {
-  const name = document.getElementById("create-reward-plan-name").value;
-  const collaborationAmount = document.getElementById("create-reward-plan-collaboration").value;
-  const nonRefundableDays = document.getElementById("create-reward-plan-refundable").value;
+  const name = document.getElementById("create-reward-plan-name-0").value;
+  const collaborationAmount = document.getElementById("create-reward-plan-collaboration-0").value;
+  const nonRefundableDays = document.getElementById("create-reward-plan-refundable-0").value;
   const nonRefundableSeconds = ethers.BigNumber.from(nonRefundableDays).mul(24).mul(60).mul(60);
 
   const signer = await provider.getSigner();
@@ -257,7 +257,7 @@ const refundAndResetInterface = {
 }
 
 async function awakePlan(provider, target, contractIndex) {
-  const resetPlan = document.getElementById("awake-plan-reset").checked;
+  const resetPlan = document.getElementById("awake-plan-reset-" + contractIndex).checked;
   const awakeAmount = resetPlan ? 0 : document.getElementById("awake-plan-value-" + contractIndex).value;
 
   const signer = await provider.getSigner();

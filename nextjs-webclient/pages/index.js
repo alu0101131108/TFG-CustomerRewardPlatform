@@ -227,7 +227,7 @@ export function RewardCenterInterface() {
   const { active, library: provider } = useWeb3React();
   const functionInterfaces = [createRewardPlanInterface];
   return (
-    <ExecutionInterface elements={functionInterfaces} />
+    <ExecutionInterface elements={functionInterfaces} contractIndex="0" />
   );
 }
 
