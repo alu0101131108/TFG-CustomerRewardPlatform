@@ -38,9 +38,9 @@ const createRewardPlanInterface = {
 };
 
 // Reward Plan - Notifier.
-async function signUpClient(provider, target) {
-  const clientID = document.getElementById("signup-client-id").value;
-  const clientAddress = document.getElementById("signup-client-address").value;
+async function signUpClient(provider, target, contractIndex) {
+  const clientID = document.getElementById("signup-client-id-" + contractIndex).value;
+  const clientAddress = document.getElementById("signup-client-address-" + contractIndex).value;
 
   const signer = await provider.getSigner();
   const RewardPlan = new ethers.Contract(target, RewardPlanABI, signer);
@@ -64,9 +64,11 @@ const signUpClientInterface = {
   ]
 };
 
-async function notifyPointsScored(provider, target) {
-  const clientID = document.getElementById("notify-points-scored-id").value;
-  const pointsAmount = document.getElementById("notify-points-scored-amount").value;
+async function notifyPointsScored(provider, target, contractIndex) {
+  const clientID = document.getElementById("notify-points-scored-id-" + contractIndex).value;
+  const pointsAmount = document.getElementById("notify-points-scored-amount-" + contractIndex).value;
+
+  // console.log(clientID, pointsAmount);
 
   const signer = await provider.getSigner();
   const RewardPlan = new ethers.Contract(target, RewardPlanABI, signer);
@@ -93,7 +95,7 @@ const notifyPointsScoredInterface = {
 // Reward Plan - Founder. 
 // leavePlan(), addFounder(address, collaborationAmount), addNotifier(address), addRewardRule(points, reward), 
 // removeRewardRule(index), beginSigningStage(), sign(), refundAndReset(), awakePlan(resetPlan).
-async function leavePlan(provider, target) {
+async function leavePlan(provider, target, contractIndex) {
   const signer = await provider.getSigner();
   const RewardPlan = new ethers.Contract(target, RewardPlanABI, signer);
   const leavePlanTx = await RewardPlan.leavePlan();
@@ -107,9 +109,9 @@ const leavePlanInterface = {
   controls: []
 };
 
-async function addFounder(provider, target) {
-  const founderAddress = document.getElementById("add-founder-address").value;
-  const collaborationAmount = document.getElementById("add-founder-collaboration").value;
+async function addFounder(provider, target, contractIndex) {
+  const founderAddress = document.getElementById("add-founder-address-" + contractIndex).value;
+  const collaborationAmount = document.getElementById("add-founder-collaboration-" + contractIndex).value;
 
   const signer = await provider.getSigner();
   const RewardPlan = new ethers.Contract(target, RewardPlanABI, signer);
@@ -133,8 +135,8 @@ const addFounderInterface = {
   ]
 };
 
-async function addNotifier(provider, target) {
-  const notifierAddress = document.getElementById("add-notifier-address").value;
+async function addNotifier(provider, target, contractIndex) {
+  const notifierAddress = document.getElementById("add-notifier-address-" + contractIndex).value;
 
   const signer = await provider.getSigner();
   const RewardPlan = new ethers.Contract(target, RewardPlanABI, signer);
@@ -154,9 +156,9 @@ const addNotifierInterface = {
   ]
 };
 
-async function addRewardRule(provider, target) {
-  const points = document.getElementById("add-reward-rule-points").value;
-  const reward = document.getElementById("add-reward-rule-reward").value;
+async function addRewardRule(provider, target, contractIndex) {
+  const points = document.getElementById("add-reward-rule-points-" + contractIndex).value;
+  const reward = document.getElementById("add-reward-rule-reward-" + contractIndex).value;
 
   const signer = await provider.getSigner();
   const RewardPlan = new ethers.Contract(target, RewardPlanABI, signer);
@@ -180,7 +182,7 @@ const addRewardRuleInterface = {
   ]
 };
 
-async function removeRewardRule(provider, target) {
+async function removeRewardRule(provider, target, contractIndex) {
   const index = (parseInt(document.getElementById("remove-reward-rule-index").value) - 1).toString();
 
   const signer = await provider.getSigner();
@@ -201,7 +203,7 @@ const removeRewardRuleInterface = {
   ]
 }
 
-async function beginSigningStage(provider, target) {
+async function beginSigningStage(provider, target, contractIndex) {
   const signer = await provider.getSigner();
   const RewardPlan = new ethers.Contract(target, RewardPlanABI, signer);
   const beginSigningStageTx = await RewardPlan.beginSigningStage();
@@ -215,7 +217,7 @@ const beginSigningStageInterface = {
   controls: []
 }
 
-async function sign(provider, target) {
+async function sign(provider, target, contractIndex) {
   const signer = await provider.getSigner();
   const RewardPlan = new ethers.Contract(target, RewardPlanABI, signer);
 
@@ -240,7 +242,7 @@ const signInterface = {
   controls: []
 }
 
-async function refundAndReset(provider, target) {
+async function refundAndReset(provider, target, contractIndex) {
   const signer = await provider.getSigner();
   const RewardPlan = new ethers.Contract(target, RewardPlanABI, signer);
   const refundAndResetTx = await RewardPlan.refundAndReset();
@@ -254,9 +256,9 @@ const refundAndResetInterface = {
   controls: []
 }
 
-async function awakePlan(provider, target) {
+async function awakePlan(provider, target, contractIndex) {
   const resetPlan = document.getElementById("awake-plan-reset").checked;
-  const awakeAmount = resetPlan ? 0 : document.getElementById("awake-plan-value").value;
+  const awakeAmount = resetPlan ? 0 : document.getElementById("awake-plan-value-" + contractIndex).value;
 
   const signer = await provider.getSigner();
   const RewardPlan = new ethers.Contract(target, RewardPlanABI, signer);

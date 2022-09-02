@@ -43,14 +43,14 @@ import {
 
 
 // Components.
-export function ExecutionInterface({ target, elements }) {
+export function ExecutionInterface({ target, elements, contractIndex }) {
   const { active, library: provider } = useWeb3React();
   const [error, setError] = useState({ isError: false, message: "" });
   const [success, setSuccess] = useState({ isSuccess: false, message: "" });
 
   async function executeContractFunction(targetFunction, successMessage) {
     try {
-      await targetFunction(provider, target);
+      await targetFunction(provider, target, contractIndex);
       setSuccess({ isSuccess: true, message: successMessage });
       setTimeout(() => { Router.reload(); }, 500);
     }
@@ -82,13 +82,13 @@ export function ExecutionInterface({ target, elements }) {
 
         <div className="col-md-8 mb-4">
           <Tab.Content>
-            {elements.map((element, index) => {
+            {elements.map((element, elementIndex) => {
               return (
-                <Tab.Pane key={index} eventKey={element.navEventKey}>
+                <Tab.Pane key={elementIndex} eventKey={element.navEventKey}>
                   <Form>
-                    {element.controls.map((control, index) => {
+                    {element.controls.map((control, controlIndex) => {
                       return (
-                        <Form.Group key={index} className="mb-3" controlId={element.navEventKey + "-" + control.id}>
+                        <Form.Group key={controlIndex} className="mb-3" controlId={element.navEventKey + "-" + control.id + "-" + contractIndex}>
                           {control.checkbox ?
                             <div className="row justify-content-center">
                               <div className="col-md-4">
@@ -143,7 +143,7 @@ export function ClientInterface({ target }) {
   );
 }
 
-export function FounderInterface({ target }) {
+export function FounderInterface({ target, contractIndex }) {
   const { active, library: provider } = useWeb3React();
 
   const [functionInterfaces, setfunctionInterfaces] = useState([]);
@@ -209,16 +209,16 @@ export function FounderInterface({ target }) {
 
         <hr className="w-75 mt-2 mb-4" />
       </div>
-      <ExecutionInterface target={target} elements={functionInterfaces} />
+      <ExecutionInterface target={target} elements={functionInterfaces} contractIndex={contractIndex} />
     </div >
   );
 }
 
-export function NotifierInterface({ target }) {
+export function NotifierInterface({ target, contractIndex }) {
   const functionInterfaces = [signUpClientInterface, notifyPointsScoredInterface, leavePlanInterface];
   return (
     <div className="row mt-4">
-      <ExecutionInterface target={target} elements={functionInterfaces} />
+      <ExecutionInterface target={target} elements={functionInterfaces} contractIndex={contractIndex} />
     </div>
   );
 }
@@ -277,7 +277,7 @@ export function ContractHeader({ target }) {
   );
 }
 
-export function ContractCard({ contract, index }) {
+export function ContractCard({ contract, contractIndex }) {
   const { active, library: provider } = useWeb3React();
 
   const [rolesInPlan, setRolesInPlan] = useState({});
@@ -296,7 +296,7 @@ export function ContractCard({ contract, index }) {
   }, []);
 
   return (
-    <Accordion.Item eventKey={index.toString()}>
+    <Accordion.Item eventKey={contractIndex}>
       <Accordion.Header>{contract.name}</Accordion.Header>
       <Accordion.Body>
         <Card>
@@ -318,15 +318,15 @@ export function ContractCard({ contract, index }) {
 
             <Tabs defaultActiveKey="none" id="contract-tabs" className="mt-3" justify>
               <Tab eventKey="client-interface" title="Client" disabled={!rolesInPlan.isClient} target={contract.address}>
-                <ClientInterface target={contract.address} />
+                <ClientInterface target={contract.address} contractIndex={contractIndex} />
               </Tab>
 
               <Tab eventKey="founder-interface" title="Founder" disabled={!rolesInPlan.isFounder} target={contract.address}>
-                <FounderInterface target={contract.address} />
+                <FounderInterface target={contract.address} contractIndex={contractIndex} />
               </Tab>
 
               <Tab eventKey="notifier-interface" title="Notifier" disabled={!rolesInPlan.isNotifier} target={contract.address}>
-                <NotifierInterface target={contract.address} />
+                <NotifierInterface target={contract.address} contractIndex={contractIndex} />
               </Tab>
             </Tabs>
           </Card.Body>
@@ -355,7 +355,7 @@ export function ContractAccordion() {
       </div>
       {relatedPlansBasics.map((plan, index) => {
         return (
-          <ContractCard key={index} contract={plan} index={index} />
+          <ContractCard key={index} contract={plan} contractIndex={index} />
         );
       })}
     </Accordion>
