@@ -69,7 +69,7 @@ describe('Tests for Reward Platform', function () {
       it('Should deploy correctly', async function () {
         // Could include chain verification with api
         env.rewardCenter = await env.rewardCenter.connect(env.Entity.A);
-        const createPlanTx = await env.rewardCenter.createRewardPlan(env.nonRefundableDuration, "Canary Islands Asociates");
+        const createPlanTx = await env.rewardCenter.createRewardPlan(env.nonRefundableDuration, "Canary Islands Asociates", env.Entity.A.collaboration);
         const [newPlanAddress] = await getEventArguments(createPlanTx, 'RewardPlanCreated');
         env.rewardPlan = await ethers.getContractAt("RewardPlan", newPlanAddress);
         env.rewardPlan = await env.rewardPlan.connect(env.Entity.A);
@@ -86,10 +86,18 @@ describe('Tests for Reward Platform', function () {
         expect(creator).to.equal(env.Entity.A.address);
       });
 
-      it('Should not have any founders', async function () {
+      it('Should have only 1 initial founder', async function () {
         const founderAddresses = await env.rewardPlan.getFounderAddresses();
 
-        expect(Array.isArray(founderAddresses) && founderAddresses.length === 0).to.equal(true);
+        expect(Array.isArray(founderAddresses) && founderAddresses.length === 1).to.equal(true);
+      });
+
+      it('Should contain Entity A information in the founders array', async function () {
+        const founderA = await env.rewardPlan.founders(0);
+
+        expect(founderA.addr).to.equal(env.Entity.A.address);
+        expect(founderA.collaborationAmount.toString()).to.equal(env.Entity.A.collaboration.toString());
+        expect(founderA.signed).to.equal(false);
       });
 
       it('Should have zero wei as initial balance', async function () {
@@ -143,33 +151,6 @@ describe('Tests for Reward Platform', function () {
         expect(planProfile.active).to.equal(true);
         expect(planProfile.creatorAddr).to.equal(env.Entity.A.address);
         expect(planProfile.totalRewarded.toString()).to.equal('0');
-      });
-
-    });
-
-    describe('Entity A adds itself as a founder', function () {
-
-      it('Should emit an event when Entity A is added as founder', async function () {
-        const addFounderTx = await env.rewardPlan.addFounder(env.Entity.A.address, env.Entity.A.collaboration);
-        const [founderAddress, collaborationAmount] = await getEventArguments(addFounderTx, 'FounderAdded');
-
-        expect(founderAddress).to.equal(env.Entity.A.address);
-        expect(collaborationAmount.toString()).to.equal(env.Entity.A.collaboration.toString());
-      });
-
-      it('Should contain Entity A information in the founders array', async function () {
-        const founderA = await env.rewardPlan.founders(0);
-
-        expect(founderA.addr).to.equal(env.Entity.A.address);
-        expect(founderA.collaborationAmount.toString()).to.equal(env.Entity.A.collaboration.toString());
-        expect(founderA.signed).to.equal(false);
-      });
-
-      it('Should have the plan address at Reward Center related plans registry', async function () {
-        const selfRelatedPlans = await env.rewardCenter.connect(env.Entity.A).getSelfRelatedPlans();
-
-        expect(selfRelatedPlans.length).to.equal(1);
-        expect(selfRelatedPlans[0]).to.equal(env.rewardPlan.address);
       });
 
     });

@@ -53,43 +53,15 @@ contract RewardPlan {
     _;
   }
 
-  modifier onlyFoundersOrCreator() {
-    if (msg.sender != creator) {
-      bool allowed = false;
-      for (uint8 i = 0; i < founders.length; i++) {
-        if (msg.sender == founders[i].addr) {
-          allowed = true;
-          break;
-        }
-      }
-      require(allowed, "Only founders authorized");
-    }
-    _;
-  }
-
   modifier onlyFounders() {
-    bool allowed = false;
-    for (uint8 i = 0; i < founders.length; i++) {
-      if (msg.sender == founders[i].addr) {
-        allowed = true;
-        break;
-      }
-    }
-    require(allowed, "Only founders authorized");
+    require(this.isFounder(msg.sender), "Only founders authorized");
     _;
   }
 
   modifier onlyNotifiers() {
-    require(notifiers[msg.sender].active, "Only notifiers authorized");
-    bool parentFounderActive = false;
-    for (uint8 i = 0; i < founders.length; i++) {
-      if (founders[i].addr == notifiers[msg.sender].addedBy) {
-        parentFounderActive = true;
-      }
-    }
     require(
-      parentFounderActive,
-      "Notifier is not valid since its parent is not a founder"
+      this.isNotifier(msg.sender),
+      "Notifier not active or its parent is no longer a founder"
     );
     _;
   }
@@ -107,15 +79,22 @@ contract RewardPlan {
     _;
   }
 
-  constructor(address creator_, uint256 nonRefundableDuration_) {
+  constructor(
+    address creator_,
+    uint256 nonRefundableDuration_,
+    uint256 collaborationAmount
+  ) {
     creator = creator_;
     nonRefundableDuration = nonRefundableDuration_;
     allowRefundTimestamp = block.timestamp + nonRefundableDuration_;
     stage = Stages.CONSTRUCTION;
     rewardCenter = RewardCenter(payable(msg.sender));
+    founders.push(Founder(creator_, collaborationAmount, false));
   }
 
   receive() external payable {}
+
+  fallback() external payable {}
 
   /*
     PRIVATES
@@ -194,6 +173,7 @@ contract RewardPlan {
   function resetPlan() private {
     stage = Stages.CONSTRUCTION;
     allowRefundTimestamp = block.timestamp + nonRefundableDuration;
+    Founder memory creatorFounder = founders[0];
 
     for (uint256 i = 1; i < founders.length; i++) {
       rewardCenter.unlinkPlanToMember(founders[i].addr);
@@ -205,17 +185,43 @@ contract RewardPlan {
 
     delete founders;
     delete rewardPointsRules;
+    delete notifierAddresses;
+
+    founders.push(
+      Founder(creatorFounder.addr, creatorFounder.collaborationAmount, false)
+    );
   }
 
-  function leavePlan() external onlyFounders {
-    for (uint256 i = 0; i < founders.length; i++) {
-      if (founders[i].addr == msg.sender) {
-        founders[i] = founders[founders.length - 1];
-        founders.pop();
-        rewardCenter.unlinkPlanToMember(founders[i].addr);
-        break;
+  /* ON ANY STAGE */
+  function leavePlan() external {
+    require(msg.sender != creator, "Creator cannot leave the plan");
+    require(
+      this.isFounder(msg.sender) || this.isNotifier(msg.sender),
+      "Not a member of the plan"
+    );
+
+    if (notifiers[msg.sender].active) {
+      notifiers[msg.sender].active = false;
+      for (uint256 i = 0; i < notifierAddresses.length; i++) {
+        if (notifierAddresses[i] == msg.sender) {
+          notifierAddresses[i] = notifierAddresses[
+            notifierAddresses.length - 1
+          ];
+          notifierAddresses.pop();
+          break;
+        }
+      }
+    } else {
+      for (uint256 i = 0; i < founders.length; i++) {
+        if (founders[i].addr == msg.sender) {
+          founders[i] = founders[founders.length - 1];
+          founders.pop();
+          break;
+        }
       }
     }
+
+    rewardCenter.unlinkPlanToMember(msg.sender);
   }
 
   /*  
@@ -225,7 +231,7 @@ contract RewardPlan {
   function addFounder(address founderAddress, uint256 collaborationAmount)
     external
     atStage(Stages.CONSTRUCTION)
-    onlyFoundersOrCreator
+    onlyFounders
   {
     // Can not add a founder twice and 256 founders is the maximum.
     require(founders.length < 256, "Founders limit reached");
@@ -252,30 +258,30 @@ contract RewardPlan {
   }
 
   // Maintains the rewardPointsRules array sorted from low to high points.
-  function addRewardRule(uint256 spendsAmount, uint256 rewardAmount)
+  function addRewardRule(uint256 scoredPoints, uint256 rewardAmount)
     external
     atStage(Stages.CONSTRUCTION)
     onlyFounders
   {
     bool sorted = rewardPointsRules.length <= 0
       ? true
-      : rewardPointsRules[rewardPointsRules.length - 1].points <= spendsAmount;
+      : rewardPointsRules[rewardPointsRules.length - 1].points <= scoredPoints;
 
     if (sorted) {
       rewardPointsRules.push(
-        RewardPointRule(spendsAmount, rewardAmount, msg.sender)
+        RewardPointRule(scoredPoints, rewardAmount, msg.sender)
       );
     } else {
       uint256 firstGreaterIndex = rewardPointsRules.length;
       RewardPointRule memory insertRule = RewardPointRule(
-        spendsAmount,
+        scoredPoints,
         rewardAmount,
         msg.sender
       );
       RewardPointRule memory auxRule;
       for (uint256 i = 0; i < rewardPointsRules.length; i++) {
         // Index search, can be optimized.
-        if (rewardPointsRules[i].points > spendsAmount) {
+        if (rewardPointsRules[i].points > scoredPoints) {
           firstGreaterIndex = i;
           break;
         }
@@ -287,7 +293,7 @@ contract RewardPlan {
       }
       rewardPointsRules.push(insertRule);
     }
-    emit RewardRuleAdded(msg.sender, spendsAmount, rewardAmount);
+    emit RewardRuleAdded(msg.sender, scoredPoints, rewardAmount);
   }
 
   function removeRewardRule(uint256 ruleIndex)
@@ -395,7 +401,7 @@ contract RewardPlan {
     external
     payable
     atStage(Stages.SLEEPING)
-    onlyFoundersOrCreator
+    onlyFounders
   {
     if (reset) {
       require(msg.sender == creator, "Only creator can reset the plan");
@@ -411,6 +417,10 @@ contract RewardPlan {
     Getters
   */
 
+  function getFounders() external view returns (Founder[] memory) {
+    return founders;
+  }
+
   function getFounderAddresses() external view returns (address[] memory) {
     address[] memory addresses = new address[](founders.length);
     for (uint8 i = 0; i < founders.length; i++) {
@@ -419,12 +429,23 @@ contract RewardPlan {
     return addresses;
   }
 
+  function getNotifierAddresses() external view returns (address[] memory) {
+    return notifierAddresses;
+  }
+
   function isClient(uint256 targetId) external view returns (bool) {
     return rewardPointsRegistry[targetId].active;
   }
 
   function isNotifier(address targetAddr) external view returns (bool) {
-    return notifiers[targetAddr].active;
+    bool activeProfile = notifiers[targetAddr].active;
+    bool parentFounderActive = false;
+    for (uint8 i = 0; i < founders.length; i++) {
+      if (founders[i].addr == notifiers[targetAddr].addedBy) {
+        parentFounderActive = true;
+      }
+    }
+    return activeProfile && parentFounderActive;
   }
 
   function isFounder(address targetAddr) external view returns (bool) {
@@ -436,5 +457,13 @@ contract RewardPlan {
       }
     }
     return result;
+  }
+
+  function getRewardRules() external view returns (RewardPointRule[] memory) {
+    return rewardPointsRules;
+  }
+
+  function isRefundable() external view returns (bool) {
+    return allowRefundTimestamp <= block.timestamp;
   }
 }

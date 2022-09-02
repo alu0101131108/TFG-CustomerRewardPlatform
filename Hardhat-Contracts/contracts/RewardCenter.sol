@@ -32,7 +32,8 @@ contract RewardCenter {
 
   function createRewardPlan(
     uint256 refundNotAllowedDuration,
-    string calldata name
+    string calldata name,
+    uint256 collaborationAmount
   ) external {
     signUpEntity(msg.sender);
     require(
@@ -41,7 +42,11 @@ contract RewardCenter {
     );
     entityRegistry[msg.sender].runningPlans++;
 
-    RewardPlan plan = new RewardPlan(msg.sender, refundNotAllowedDuration);
+    RewardPlan plan = new RewardPlan(
+      msg.sender,
+      refundNotAllowedDuration,
+      collaborationAmount
+    );
 
     entityRelatedPlans[msg.sender].push(address(plan));
     planRegistry[address(plan)] = PlanProfile(true, msg.sender, 0, name);

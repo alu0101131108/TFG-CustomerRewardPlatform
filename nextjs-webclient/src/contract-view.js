@@ -61,27 +61,55 @@ async function getRolesInPlan(provider, target) {
   };
 }
 
+async function getClientScoredPoints(provider, target) {
+  const signer = await provider.getSigner();
+  const signerAddress = await signer.getAddress();
+  const RewardCenter = new ethers.Contract(RewardCenterAddress, RewardCenterABI, signer);
+  const RewardPlan = new ethers.Contract(target, RewardPlanABI, signer);
 
-function getContractRules() {
-  const contract_rules = [
-    {
-      points: '1000',
-      reward: '10000'
-    },
-    {
-      points: '2000',
-      reward: '20000'
-    },
-    {
-      points: '3000',
-      reward: '30000'
-    }
-  ];
-  return contract_rules;
+  const clientID = await RewardCenter.clientAddressToId(signerAddress);
+  const [active, points] = await RewardPlan.rewardPointsRegistry(clientID);
+
+  return points.toString();
 }
-function getClientScoredPoints() {
-  const scoredPoints = '200';
-  return scoredPoints;
+
+async function getContractRules(provider, target) {
+  const signer = await provider.getSigner();
+  const RewardPlan = new ethers.Contract(target, RewardPlanABI, signer);
+  const rules = await RewardPlan.getRewardRules();
+
+  return rules.map(rule => {
+    return {
+      points: rule[0].toString(),
+      reward: rule[1].toString()
+    };
+  });
+}
+
+async function getFounderRelatedData(provider, target) {
+  const signer = await provider.getSigner();
+  const RewardPlan = new ethers.Contract(target, RewardPlanABI, signer);
+  const isRefundable = await RewardPlan.isRefundable();
+  const creator = await RewardPlan.creator();
+  const stage = await RewardPlan.stage();
+  const founders = await RewardPlan.getFounders();
+  const notifiers = await RewardPlan.getNotifierAddresses();
+  const canLeavePlan = creator !== await signer.getAddress();
+
+  return {
+    isRefundable,
+    stage,
+    founders: founders.map(founder => {
+      return {
+        address: founder[0],
+        collaborationAmount: founder[1].toString(),
+        signed: founder[2],
+        isCreator: founder[0] === creator
+      };
+    }),
+    notifiers,
+    canLeavePlan
+  };
 }
 
 module.exports = {
@@ -90,5 +118,6 @@ module.exports = {
   getPlanHeaderData,
   getRolesInPlan,
   getContractRules,
-  getClientScoredPoints
+  getClientScoredPoints,
+  getFounderRelatedData
 };

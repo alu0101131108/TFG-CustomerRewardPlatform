@@ -1,9 +1,8 @@
-// import Head from 'next/head';
-// import Image from 'next/image';
-// import styles from '../styles/Home.module.css';
+import Router from "next/router";
 import { useWeb3React } from '@web3-react/core';
-import { InjectedConnector } from '@web3-react/injected-connector';
 import { useState, useEffect } from 'react';
+import { InjectedConnector } from '@web3-react/injected-connector';
+const injector = new InjectedConnector();
 
 import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
@@ -15,6 +14,7 @@ import Form from 'react-bootstrap/Form';
 import Nav from 'react-bootstrap/Nav';
 import Spinner from 'react-bootstrap/Spinner';
 import Alert from 'react-bootstrap/Alert';
+import Badge from 'react-bootstrap/Badge';
 
 import {
   getRewardCenterData,
@@ -22,122 +22,212 @@ import {
   getPlanHeaderData,
   getRolesInPlan,
   getContractRules,
-  getClientScoredPoints
+  getClientScoredPoints,
+  getFounderRelatedData
 } from '../src/contract-view.js';
 
 import {
-  createRewardPlan
+  createRewardPlanInterface,
+  signUpClientInterface,
+  notifyPointsScoredInterface,
+  leavePlanInterface,
+  addFounderInterface,
+  addNotifierInterface,
+  addRewardRuleInterface,
+  removeRewardRuleInterface,
+  beginSigningStageInterface,
+  signInterface,
+  refundAndResetInterface,
+  awakePlanInterface
 } from '../src/contract-execute.js';
-
-import { ethers } from 'ethers';
 
 
 // Components.
-export function ContractRules() {
-  const contract_rules = getContractRules();
-  return (
-    <ListGroup>
-      {contract_rules.map((rule, index) => {
-        return (
-          <ListGroup.Item key={index}>
-            #{index + 1} Score {rule.points} points to earn {rule.reward} WEI
-          </ListGroup.Item>
-        );
-      })}
-    </ListGroup>
-  );
-}
-
-export function ClientInterface({ target }) {
-  return (
-    <div className="row">
-      <div className="col-md-12 mt-2">
-        <Card.Text><b>Points Scored:</b> {" " + getClientScoredPoints()}</Card.Text>
-        <Card.Text><b>Rules:</b></Card.Text><ContractRules />
-      </div>
-    </div>
-  );
-}
-
-export function FounderInterface({ target }) {
-  return (
-    <div className="row">
-      <div className="col-md-12">
-        <Card.Title>Founder Interface</Card.Title>
-      </div>
-    </div>
-  );
-}
-
-export function NotifierInterface({ target }) {
-  return (
-    <div className="row">
-      <div className="col-md-12">
-        <Card.Title>Notifier Interface</Card.Title>
-      </div>
-    </div>
-  );
-}
-
-export function RewardCenterInterface() {
-
+export function ExecutionInterface({ target, elements }) {
   const { active, library: provider } = useWeb3React();
   const [error, setError] = useState({ isError: false, message: "" });
   const [success, setSuccess] = useState({ isSuccess: false, message: "" });
 
-  async function executeCreateRewardPlan() {
+  async function executeContractFunction(targetFunction, successMessage) {
     try {
-      const name = document.getElementById("create-reward-plan-name").value;
-      const nonRefundableDays = document.getElementById("create-reward-plan-refundable").value;
-      const nonRefundableSeconds = ethers.BigNumber.from(nonRefundableDays).mul(24).mul(60).mul(60);
-      await createRewardPlan(provider, name, nonRefundableSeconds);
-      setSuccess({ isSuccess: true, message: "Reward plan created successfully." });
-      setTimeout(() => { setSuccess({ isSuccess: false }) }, 3000);
-    } catch (e) {
-      setError({ isError: true, message: e.message });
+      await targetFunction(provider, target);
+      setSuccess({ isSuccess: true, message: successMessage });
+      setTimeout(() => { Router.reload(); }, 500);
+    }
+    catch (e) {
+      setError({ isError: true, message: e.reason || e.message });
       console.log(e);
+      setTimeout(() => { setError({ isError: false }) }, 5000);
     }
   }
 
   return (
     <Tab.Container id="left-tabs-example" defaultActiveKey="first">
-      <div className="row">
+      <div className="row  text-center align-items-center">
         <div className="col-md-4">
           <Nav variant="pills" className="flex-column">
-            <Nav.Item>
-              <Nav.Link eventKey="create-reward-plan">Create Reward Plan</Nav.Link>
-            </Nav.Item>
+            <ListGroup>
+              {elements.map((element, index) => {
+                return (
+                  <ListGroup.Item key={index} variant="light">
+                    <Nav.Item >
+                      <Nav.Link disabled={element.disabled} eventKey={element.navEventKey}>{element.navText}</Nav.Link>
+                    </Nav.Item>
+                  </ListGroup.Item>
+                );
+              })}
+            </ListGroup>
           </Nav>
         </div>
 
         <div className="col-md-8 mb-4">
           <Tab.Content>
-            <Tab.Pane eventKey="create-reward-plan">
-
-              <Form>
-                <Form.Group className="mb-3" controlId="create-reward-plan-name">
-                  <Form.Control type="text" placeholder="Name" />
-                </Form.Group>
-
-                <Form.Group className="mb-3" controlId="create-reward-plan-refundable">
-                  <Form.Control type="text" placeholder="Non refundable days" />
-                </Form.Group>
-
-                <Button onClick={executeCreateRewardPlan}>Execute</Button>
-              </Form>
-
-            </Tab.Pane>
+            {elements.map((element, index) => {
+              return (
+                <Tab.Pane key={index} eventKey={element.navEventKey}>
+                  <Form>
+                    {element.controls.map((control, index) => {
+                      return (
+                        <Form.Group key={index} className="mb-3" controlId={element.navEventKey + "-" + control.id}>
+                          {control.checkbox ?
+                            <div className="row justify-content-center">
+                              <div className="col-md-4">
+                                <Form.Check type="checkbox" label={control.placeholder} />
+                              </div>
+                            </div>
+                            : <Form.Control type="text" placeholder={control.placeholder} />
+                          }
+                        </Form.Group>
+                      );
+                    })}
+                    <Button onClick={() => executeContractFunction(element.executeFunction, element.successMessage)}>Execute</Button>
+                  </Form>
+                </Tab.Pane>
+              );
+            })}
           </Tab.Content>
         </div>
-
-        {error.isError ?
-          <Alert variant="danger" >{error.message}</Alert>
-          : null}
-        {success.isSuccess ?
-          <Alert variant="success" >{success.message}</Alert>
-          : null}
       </div>
+
+      {error.isError ?
+        <Alert variant="danger" >{error.message}</Alert>
+        : null}
+      {success.isSuccess ?
+        <Alert variant="success" >{success.message}</Alert>
+        : null}
     </Tab.Container>
+  );
+}
+
+export function ClientInterface({ target }) {
+  const { active, library: provider } = useWeb3React();
+
+  const [scoredPoints, setScoredPoints] = useState(0);
+  useEffect(() => {
+    getClientScoredPoints(provider, target).then((score) => {
+      setScoredPoints(score);
+    });
+  }, []);
+
+  return (
+    <div className="row justify-content-center">
+      <hr className="w-75 mt-4" />
+      <div className="col-md-12 fw-semibold text-center">
+        <Card.Text>Points Scored</Card.Text>
+      </div>
+      <div className="col-md-12 mt-2 text-center">
+        <Card.Text>{scoredPoints}</Card.Text>
+      </div>
+      <hr className="w-75 mt-3" />
+    </div>
+  );
+}
+
+export function FounderInterface({ target }) {
+  const { active, library: provider } = useWeb3React();
+
+  const [functionInterfaces, setfunctionInterfaces] = useState([]);
+  const [founderRelatedData, setFounderRelatedData] = useState({ notReady: true });
+  useEffect(() => {
+    getFounderRelatedData(provider, target).then((data) => {
+      if (!data.isRefundable) refundAndResetInterface['disabled'] = true;
+      if (!data.canLeavePlan) leavePlanInterface['disabled'] = true;
+      switch (data.stage) {
+        case 0:
+          setfunctionInterfaces([addFounderInterface, addNotifierInterface, addRewardRuleInterface, removeRewardRuleInterface, beginSigningStageInterface, leavePlanInterface]);
+          break;
+        case 1:
+          setfunctionInterfaces([signInterface, refundAndResetInterface, leavePlanInterface]);
+          break;
+        case 2:
+          break;
+        case 3:
+          setfunctionInterfaces([awakePlanInterface, leavePlanInterface]);
+          break;
+      }
+      setFounderRelatedData(data);
+    });
+  }, []);
+
+  return founderRelatedData.notReady ? null : (
+    <div>
+      <div className="row mt-4 justify-content-center">
+        <hr className="w-75" />
+
+        <div className="col-md-12 mb-3">
+          <ListGroup>
+            <div className="text-center fw-semibold mb-2">Founders</div>
+            {founderRelatedData.founders.map((founder, index) => {
+              return (
+                <ListGroup.Item key={index}>
+                  <div className="row">
+                    <div className="col-md-10 p-2">
+                      {"#" + (index + 1) + ": " + founder.address + " - " + founder.collaborationAmount + " WEI"}
+                    </div>
+                    <div className="col-md-2 text-center p-2">
+                      {founder.signed ? <Badge bg="primary" pill className="p-2"> Signed </Badge> : null}
+                    </div>
+                  </div>
+                </ListGroup.Item>
+              );
+            })}
+          </ListGroup>
+        </div>
+
+        <div className="col-md-12 mb-3">
+          <ListGroup>
+            <div className="text-center fw-semibold mb-2">{founderRelatedData.notifiers.length === 0 ? "Notifiers (empty)" : "Notifiers"}</div>
+            {founderRelatedData.notifiers.map((notifier, index) => {
+              return (
+                <ListGroup.Item key={index}>
+                  {"#" + (index + 1) + ": " + notifier}
+                </ListGroup.Item>
+              );
+            })}
+          </ListGroup>
+        </div>
+
+        <hr className="w-75 mt-2 mb-4" />
+      </div>
+      <ExecutionInterface target={target} elements={functionInterfaces} />
+    </div >
+  );
+}
+
+export function NotifierInterface({ target }) {
+  const functionInterfaces = [signUpClientInterface, notifyPointsScoredInterface, leavePlanInterface];
+  return (
+    <div className="row mt-4">
+      <ExecutionInterface target={target} elements={functionInterfaces} />
+    </div>
+  );
+}
+
+export function RewardCenterInterface() {
+  const { active, library: provider } = useWeb3React();
+  const functionInterfaces = [createRewardPlanInterface];
+  return (
+    <ExecutionInterface elements={functionInterfaces} />
   );
 }
 
@@ -188,7 +278,6 @@ export function ContractHeader({ target }) {
 }
 
 export function ContractCard({ contract, index }) {
-
   const { active, library: provider } = useWeb3React();
 
   const [rolesInPlan, setRolesInPlan] = useState({});
@@ -199,6 +288,13 @@ export function ContractCard({ contract, index }) {
       });
   }, [])
 
+  const [contractRules, setContractRules] = useState([]);
+  useEffect(() => {
+    getContractRules(provider, contract.address).then(result => {
+      setContractRules(result)
+    });
+  }, []);
+
   return (
     <Accordion.Item eventKey={index.toString()}>
       <Accordion.Header>{contract.name}</Accordion.Header>
@@ -208,21 +304,30 @@ export function ContractCard({ contract, index }) {
             <ContractHeader target={contract.address} />
           </Card.Header>
 
-          <Card.Body>
-            <Tabs defaultActiveKey="none" id="contract-tabs" className="mb-3" justify>
+          <Card.Body >
+            <ListGroup>
+              <div className="text-center fw-semibold mb-2">{contractRules.length === 0 ? "No reward rules yet" : "Contract Rules"}</div>
+              {contractRules.map((rule, index) => {
+                return (
+                  <ListGroup.Item key={index}>
+                    #{index + 1}: Score {rule.points} points to earn {rule.reward} WEI
+                  </ListGroup.Item>
+                );
+              })}
+            </ListGroup>
 
+            <Tabs defaultActiveKey="none" id="contract-tabs" className="mt-3" justify>
               <Tab eventKey="client-interface" title="Client" disabled={!rolesInPlan.isClient} target={contract.address}>
-                <ClientInterface />
+                <ClientInterface target={contract.address} />
               </Tab>
 
               <Tab eventKey="founder-interface" title="Founder" disabled={!rolesInPlan.isFounder} target={contract.address}>
-                <FounderInterface />
+                <FounderInterface target={contract.address} />
               </Tab>
 
               <Tab eventKey="notifier-interface" title="Notifier" disabled={!rolesInPlan.isNotifier} target={contract.address}>
-                <NotifierInterface />
+                <NotifierInterface target={contract.address} />
               </Tab>
-
             </Tabs>
           </Card.Body>
         </Card>
@@ -259,7 +364,7 @@ export function ContractAccordion() {
 
 export function RewardCenterCard() {
   const { active, library: provider } = useWeb3React();
-  const [rewardCenterData, setRewardCenterData] = useState({ titles: [], values: [] });
+  const [rewardCenterData, setRewardCenterData] = useState({ titles: [], values: [], connected: false });
 
   useEffect(() => {
     getRewardCenterData(provider)
@@ -278,7 +383,10 @@ export function RewardCenterCard() {
           titles = titles.concat(entityTitles);
           values = values.concat(entityValues);
         }
-        setRewardCenterData({ titles, values });
+        if (!data.isClient && !data.isEntity) {
+          titles = ["No information related to the current account"];
+        }
+        setRewardCenterData({ titles, values, connected: true });
       })
       .catch(e => console.log("Error with Reward Center"));
   }, []);
@@ -288,20 +396,20 @@ export function RewardCenterCard() {
       <div className="text-center p-2 text-white bg-dark">
         <h4>Reward Center</h4>
       </div>
-      <Card.Body className="text-center">
+      <Card.Body>
         <hr />
-        <div className="row justify-content-center">
+        <div className="row justify-content-center text-center">
           {rewardCenterData.titles.map((title, index) => {
             return <div key={index} className="col-md-4 fw-semibold">{title} </div>;
           })}
         </div>
-        <div className="row justify-content-center">
+        <div className="row justify-content-center text-center">
           {rewardCenterData.values.map((value, index) => {
             return <div key={index} className="col-md-4">{value}</div>;
           })}
         </div>
         <hr />
-        <RewardCenterInterface />
+        {rewardCenterData.connected ? <RewardCenterInterface /> : null}
       </Card.Body>
     </Card>
   );
@@ -310,11 +418,11 @@ export function RewardCenterCard() {
 // Main component.
 function Home() {
   const { activate, active, library: provider } = useWeb3React();
-  const [criticalError, setCriticalError] = useState(false);
+  const [providerError, setProviderError] = useState(false);
 
   useEffect(() => {
-    activate(new InjectedConnector()).catch(e => {
-      setCriticalError(true);
+    activate(injector).catch(e => {
+      setProviderError(true);
     });
   }, [])
 
@@ -326,9 +434,10 @@ function Home() {
       </div>
       <hr />
 
-      {criticalError ?
-        <Alert variant="danger" >
-          Critical Error.
+      {providerError ?
+        <Alert variant="danger" className='row justify-content-center'>
+          <div className='row justify-content-center'>Error connecting to Metamask</div>
+          <div className='row w-25 mt-2'><Button onClick={() => activate(injector)}>Retry</Button></div>
         </Alert>
         : null}
 
@@ -348,7 +457,7 @@ function Home() {
         </div>
         : null}
 
-    </div>
+    </div >
   );
 }
 
