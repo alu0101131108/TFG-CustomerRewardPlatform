@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 
-const RewardCenterABI = require('../../Hardhat-Contracts/artifacts/contracts/RewardCenter.sol/RewardCenter.json').abi;
-const RewardPlanABI = require('../../Hardhat-Contracts/artifacts/contracts/RewardPlan.sol/RewardPlan.json').abi;
+const RewardCenterABI = require('../../Hardhat-Contracts/artifacts/contracts/RewardCenter.sol/RewardCenter.json').abi;  // require('./RewardCenter.json').abi;
+const RewardPlanABI = require('../../Hardhat-Contracts/artifacts/contracts/RewardPlan.sol/RewardPlan.json').abi;        // require('./RewardPlan.json').abi;
 const RewardCenterAddress = '0x5fbdb2315678afecb367f032d93f642f64180aa3';
 
 async function getRewardCenterData(provider) {
