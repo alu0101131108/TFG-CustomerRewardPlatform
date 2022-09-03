@@ -12,7 +12,6 @@ import Tabs from 'react-bootstrap/Tabs';
 import ListGroup from 'react-bootstrap/ListGroup';
 import Form from 'react-bootstrap/Form';
 import Nav from 'react-bootstrap/Nav';
-import Spinner from 'react-bootstrap/Spinner';
 import Alert from 'react-bootstrap/Alert';
 import Badge from 'react-bootstrap/Badge';
 
@@ -23,7 +22,8 @@ import {
   getRolesInPlan,
   getContractRules,
   getClientScoredPoints,
-  getFounderRelatedData
+  getFounderRelatedData,
+  getPlanStage
 } from '../src/contract-view.js';
 
 import {
@@ -215,7 +215,17 @@ export function FounderInterface({ target, contractIndex }) {
 }
 
 export function NotifierInterface({ target, contractIndex }) {
-  const functionInterfaces = [signUpClientInterface, notifyPointsScoredInterface, leavePlanInterface];
+  const { active, library: provider } = useWeb3React();
+
+  const [functionInterfaces, setfunctionInterfaces] = useState([leavePlanInterface]);
+  useEffect(() => {
+    getPlanStage(provider, target).then((stage) => {
+      if (stage === 2) {
+        setfunctionInterfaces([signUpClientInterface, notifyPointsScoredInterface, leavePlanInterface]);
+      }
+    });
+  }, []);
+
   return (
     <div className="row mt-4">
       <ExecutionInterface target={target} elements={functionInterfaces} contractIndex={contractIndex} />

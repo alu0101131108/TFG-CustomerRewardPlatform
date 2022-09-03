@@ -112,6 +112,12 @@ async function getFounderRelatedData(provider, target) {
   };
 }
 
+async function getPlanStage(provider, target) {
+  const signer = await provider.getSigner();
+  const RewardPlan = new ethers.Contract(target, RewardPlanABI, signer);
+  return await RewardPlan.stage();
+}
+
 module.exports = {
   getRewardCenterData,
   getRelatedPlansBasics,
@@ -119,5 +125,6 @@ module.exports = {
   getRolesInPlan,
   getContractRules,
   getClientScoredPoints,
-  getFounderRelatedData
+  getFounderRelatedData,
+  getPlanStage
 };
