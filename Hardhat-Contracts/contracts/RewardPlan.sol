@@ -2,11 +2,10 @@
 
 pragma solidity ^0.8.9;
 
-import "./Constants.sol";
-import "./DataStructures.sol";
 import "./RewardCenter.sol";
+import "./DataStructures.sol";
 
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 enum Stages {
   CONSTRUCTION,
@@ -16,25 +15,23 @@ enum Stages {
 }
 
 contract RewardPlan {
-  /* Main attributes */
+  /* 
+    Attributes 
+  */
+  RewardCenter public rewardCenter;
   Stages public stage;
   address public creator;
   Founder[] public founders;
   address[] public notifierAddresses;
   mapping(address => Notifier) public notifiers;
-
-  /* Constants */
-  RewardCenter public rewardCenter;
-
+  RewardPointRule[] public rewardPointsRules; // Sorted low to high points
+  mapping(uint256 => ClientPoints) public rewardPointsRegistry; // Client Id -> Client Points
   uint256 public nonRefundableDuration;
   uint256 public allowRefundTimestamp;
 
-  /* Rules */
-  RewardPointRule[] public rewardPointsRules; /* Sorted low to high points*/
-
-  /* Client registries */
-  mapping(uint256 => ClientPoints) public rewardPointsRegistry; /* Client Id -> Client Points */
-
+  /* 
+    Events 
+  */
   event FounderAdded(address founderAddress, uint256 collaborationAmount);
   event RewardRuleAdded(address founderAddress, uint256 points, uint256 reward);
   event RewardRuleRemoved(address founderAddress, uint256 index);
@@ -45,14 +42,9 @@ contract RewardPlan {
   event PointsScored(uint256 clientId, uint256 amount, uint256 grantedReward);
   event PlanAwaken(address caller, uint256 collaboration);
 
-  modifier onlyRewardCenter() {
-    require(
-      msg.sender == address(rewardCenter),
-      "Only reward center authorized"
-    );
-    _;
-  }
-
+  /* 
+    Modifiers 
+  */
   modifier onlyFounders() {
     require(this.isFounder(msg.sender), "Only founders authorized");
     _;
@@ -79,6 +71,9 @@ contract RewardPlan {
     _;
   }
 
+  /* 
+    Constructor and Handlers  
+  */
   constructor(
     address creator_,
     uint256 nonRefundableDuration_,
@@ -96,8 +91,8 @@ contract RewardPlan {
 
   fallback() external payable {}
 
-  /*
-    PRIVATES
+  /* 
+    Private Functions 
   */
   function checkSignatures() private view returns (bool) {
     bool allSigned = true;
@@ -192,7 +187,10 @@ contract RewardPlan {
     );
   }
 
-  /* ON ANY STAGE */
+  /*  
+    External Functions
+  */
+  /* At any stage */
   function leavePlan() external {
     require(msg.sender != creator, "Creator cannot leave the plan");
     require(
@@ -224,10 +222,7 @@ contract RewardPlan {
     rewardCenter.unlinkPlanToMember(msg.sender);
   }
 
-  /*  
-    EXTERNALS
-  */
-  /* ON CONSTRUCTION */
+  /* At construction stage */
   function addFounder(address founderAddress, uint256 collaborationAmount)
     external
     atStage(Stages.CONSTRUCTION)
@@ -257,12 +252,12 @@ contract RewardPlan {
     emit NotifierAdded(notifierAddress, msg.sender);
   }
 
-  // Maintains the rewardPointsRules array sorted from low to high points.
   function addRewardRule(uint256 scoredPoints, uint256 rewardAmount)
     external
     atStage(Stages.CONSTRUCTION)
     onlyFounders
   {
+    // Maintains the rewardPointsRules array sorted from low to high points.
     bool sorted = rewardPointsRules.length <= 0
       ? true
       : rewardPointsRules[rewardPointsRules.length - 1].points <= scoredPoints;
@@ -326,6 +321,7 @@ contract RewardPlan {
     emit SigningStageBegun(msg.sender);
   }
 
+  /* At signing stage */
   function sign() external payable atStage(Stages.SIGNING) onlyFounders {
     for (uint8 i = 0; i < founders.length; i++) {
       if (msg.sender == founders[i].addr) {
@@ -361,7 +357,7 @@ contract RewardPlan {
     resetPlan();
   }
 
-  /* ON ACTIVE */
+  /* At active stage */
   function signUpClient(uint256 clientId, address addr)
     external
     atStage(Stages.ACTIVE)
@@ -398,7 +394,7 @@ contract RewardPlan {
     emit PointsScored(clientId, amount, totalRewarded);
   }
 
-  /* ON SLEEP */
+  /* At sleeping stage */
   function awakePlan(bool reset)
     external
     payable
@@ -416,9 +412,8 @@ contract RewardPlan {
   }
 
   /* 
-    Getters
+    External View Functions
   */
-
   function getFounders() external view returns (Founder[] memory) {
     return founders;
   }

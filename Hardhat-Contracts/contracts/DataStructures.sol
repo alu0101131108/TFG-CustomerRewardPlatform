@@ -2,16 +2,16 @@
 
 pragma solidity ^0.8.9;
 
-struct ClientProfile {
-  bool active;
-  address addr;
-  uint256 rewards;
-}
-
 struct EntityProfile {
   bool active;
   address addr;
   uint8 runningPlans; // 256 max
+}
+
+struct ClientProfile {
+  bool active;
+  address addr;
+  uint256 rewards;
 }
 
 struct PlanProfile {

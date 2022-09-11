@@ -2,14 +2,21 @@
 
 pragma solidity ^0.8.9;
 
-import "./Constants.sol";
-import "./DataStructures.sol";
 import "./RewardPlan.sol";
+import "./DataStructures.sol";
 
 // import "hardhat/console.sol";
 
+/**
+ * @title RewardCenter
+ * @dev RewardCenter is a contract for managing reward plans.
+ */
 contract RewardCenter {
+  /* 
+    Attributes 
+  */
   mapping(address => uint256) public clientAddressToId; // Client address => to Numeric Id.
+
   mapping(uint256 => ClientProfile) public clientRegistry; // Numeric Id => Client Profile.
   mapping(address => EntityProfile) public entityRegistry; // Address => Entity Profile.
   mapping(address => PlanProfile) public planRegistry; // Address => Reward Plan Profile.
@@ -17,19 +24,41 @@ contract RewardCenter {
   mapping(address => address[]) public entityRelatedPlans; // Address => Plan address array.
   mapping(address => address[]) public clientRelatedPlans; // Address => Plan address array.
 
+  /* 
+    Events 
+  */
   event RewardPlanCreated(address planAddress, address creator);
 
+  /* 
+    Modifiers 
+  */
   modifier onlyPlans() {
     require(planRegistry[msg.sender].active, "Only active plans authorized");
     _;
   }
 
+  /* 
+    Constructor and Handlers 
+  */
+  constructor() {}
+
   receive() external payable {}
 
   fallback() external payable {}
 
-  constructor() {}
+  /* 
+    Private Functions
+  */
+  function signUpEntity(address founderAddress) private {
+    // Will be called only by creating a plan or being added as member to one.
+    if (!entityRegistry[founderAddress].active) {
+      entityRegistry[founderAddress] = EntityProfile(true, founderAddress, 0);
+    }
+  }
 
+  /* 
+    External Functions
+  */
   function createRewardPlan(
     uint256 refundNotAllowedDuration,
     string calldata name,
@@ -54,6 +83,7 @@ contract RewardCenter {
     emit RewardPlanCreated(address(plan), msg.sender);
   }
 
+  /* Only Reward Plan Contracts */
   function notifyMemberAddedToPlan(address memberAddress) external onlyPlans {
     signUpEntity(memberAddress);
     require(
@@ -63,13 +93,6 @@ contract RewardCenter {
     if (planRegistry[msg.sender].creatorAddr != memberAddress) {
       entityRegistry[memberAddress].runningPlans++;
       entityRelatedPlans[memberAddress].push(msg.sender);
-    }
-  }
-
-  // Will be called only by creating a plan or being added as member to one.
-  function signUpEntity(address founderAddress) private {
-    if (!entityRegistry[founderAddress].active) {
-      entityRegistry[founderAddress] = EntityProfile(true, founderAddress, 0);
     }
   }
 
@@ -110,9 +133,8 @@ contract RewardCenter {
   }
 
   /* 
-    Getters
+    External View Functions
   */
-
   function checkRolesInPlan(address planAddress)
     external
     view
